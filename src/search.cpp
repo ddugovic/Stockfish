@@ -863,7 +863,21 @@ namespace {
         assert((ss-1)->currentMove != MOVE_NONE);
         assert((ss-1)->currentMove != MOVE_NULL);
 
-        MovePicker mp(pos, ttMove, thisThread->history, PieceValue[MG][pos.captured_piece_type()]);
+		Value mpValue;
+#ifdef HORDE
+		if (pos.is_horde())
+		{
+			mpValue = HordeValue[MG][pos.captured_piece_type()];
+		}
+		else
+		{
+#endif
+			mpValue = PieceValue[MG][pos.captured_piece_type()];
+#ifdef HORDE
+		}
+#endif
+
+        MovePicker mp(pos, ttMove, thisThread->history, mpValue);
         CheckInfo ci(pos);
 
         while ((move = mp.next_move()) != MOVE_NONE)
@@ -1025,6 +1039,7 @@ moves_loop: // When in check search starts from here
               if (futilityValue <= alpha)
               {
                   bestValue = std::max(bestValue, futilityValue);
+				  assert(bestValue > -VALUE_INFINITE && bestValue < VALUE_INFINITE);
                   continue;
               }
           }
@@ -1157,6 +1172,8 @@ moves_loop: // When in check search starts from here
       {
           bestValue = value;
 
+		  assert(bestValue > -VALUE_INFINITE && bestValue < VALUE_INFINITE);
+
           if (value > alpha)
           {
               // If there is an easy move for this position, clear it if unstable
@@ -1206,6 +1223,8 @@ moves_loop: // When in check search starts from here
 #endif
         bestValue = excludedMove ? alpha
                    :     inCheck ? mated_in(ss->ply) : DrawValue[pos.side_to_move()];
+
+		assert(bestValue > -VALUE_INFINITE && bestValue < VALUE_INFINITE);
     }
 
     // Quiet best move: update killers, history and countermoves
@@ -1341,6 +1360,7 @@ moves_loop: // When in check search starts from here
                             : (tte->bound() &  BOUND_UPPER)))
     {
         ss->currentMove = ttMove; // Can be MOVE_NONE
+		assert(ttValue > -VALUE_INFINITE && ttValue < VALUE_INFINITE);
         return ttValue;
     }
 
@@ -1349,6 +1369,7 @@ moves_loop: // When in check search starts from here
     {
         ss->staticEval = VALUE_NONE;
         bestValue = futilityBase = -VALUE_INFINITE;
+		assert(bestValue >= -VALUE_INFINITE && bestValue <= VALUE_INFINITE);
     }
     else
     {
@@ -1362,6 +1383,7 @@ moves_loop: // When in check search starts from here
             if (ttValue != VALUE_NONE)
                 if (tte->bound() & (ttValue > bestValue ? BOUND_LOWER : BOUND_UPPER))
                     bestValue = ttValue;
+			assert(bestValue >= -VALUE_INFINITE && bestValue <= VALUE_INFINITE);
         }
         else
             ss->staticEval = bestValue =
@@ -1374,7 +1396,7 @@ moves_loop: // When in check search starts from here
             if (!ttHit)
                 tte->save(pos.key(), value_to_tt(bestValue, ss->ply), BOUND_LOWER,
                           DEPTH_NONE, MOVE_NONE, ss->staticEval, TT.generation());
-
+			assert(bestValue > -VALUE_INFINITE && bestValue < VALUE_INFINITE);
             return bestValue;
         }
 
@@ -1411,17 +1433,30 @@ moves_loop: // When in check search starts from here
       {
           assert(type_of(move) != ENPASSANT); // Due to !pos.advanced_pawn_push
 
-          futilityValue = futilityBase + PieceValue[EG][pos.piece_on(to_sq(move))];
+#ifdef HORDE
+		  if (pos.is_horde())
+		  {
+			  futilityValue = futilityBase + HordeValue[EG][pos.piece_on(to_sq(move))];
+		  }
+		  else
+		  {
+#endif
+			  futilityValue = futilityBase + PieceValue[EG][pos.piece_on(to_sq(move))];
+#ifdef HORDE
+		  }
+#endif
 
           if (futilityValue <= alpha)
           {
               bestValue = std::max(bestValue, futilityValue);
+			  assert(bestValue >= -VALUE_INFINITE && bestValue <= VALUE_INFINITE);
               continue;
           }
 
           if (futilityBase <= alpha && pos.see(move) <= VALUE_ZERO)
           {
               bestValue = std::max(bestValue, futilityBase);
+			  assert(bestValue >= -VALUE_INFINITE && bestValue <= VALUE_INFINITE);
               continue;
           }
       }
@@ -1450,8 +1485,10 @@ moves_loop: // When in check search starts from here
       pos.do_move(move, st, givesCheck);
       value = givesCheck ? -qsearch<NT,  true>(pos, ss+1, -beta, -alpha, depth - ONE_PLY)
                          : -qsearch<NT, false>(pos, ss+1, -beta, -alpha, depth - ONE_PLY);
-      pos.undo_move(move);
 
+	  std::string debugFenb4 = pos.fen();
+      pos.undo_move(move);
+	  std::string debugFena = pos.fen();
       assert(value > -VALUE_INFINITE);
       assert(value < VALUE_INFINITE);
       assert(value > -VALUE_INFINITE && value < VALUE_INFINITE);
@@ -1460,6 +1497,8 @@ moves_loop: // When in check search starts from here
       if (value > bestValue)
       {
           bestValue = value;
+
+		  assert(bestValue > -VALUE_INFINITE && bestValue < VALUE_INFINITE);
 
           if (value > alpha)
           {
@@ -1475,7 +1514,7 @@ moves_loop: // When in check search starts from here
               {
                   tte->save(posKey, value_to_tt(value, ss->ply), BOUND_LOWER,
                             ttDepth, move, ss->staticEval, TT.generation());
-
+				  assert(value > -VALUE_INFINITE && value < VALUE_INFINITE);
                   return value;
               }
           }
@@ -1491,7 +1530,7 @@ moves_loop: // When in check search starts from here
               PvNode && bestValue > oldAlpha ? BOUND_EXACT : BOUND_UPPER,
               ttDepth, bestMove, ss->staticEval, TT.generation());
 
-    assert(bestValue > -VALUE_INFINITE && bestValue < VALUE_INFINITE);
+	assert(bestValue > -VALUE_INFINITE && bestValue < VALUE_INFINITE);
 
     return bestValue;
   }

@@ -130,12 +130,24 @@ namespace {
     e->pawnsOnSquares[Us][BLACK] = popcount<Max15>(ourPawns & DarkSquares);
     e->pawnsOnSquares[Us][WHITE] = pos.count<PAWN>(Us) - e->pawnsOnSquares[Us][BLACK];
 
+#ifdef HORDE
+	int pawnFileCnt[FILE_NB];
+	for (int z = 0; z < FILE_NB; z++)
+	{
+		pawnFileCnt[z] = 0;
+	}
+#endif
+
     // Loop through all pawns of the current color and score each pawn
     while ((s = *pl++) != SQ_NONE)
     {
         assert(pos.piece_on(s) == make_piece(Us, PAWN));
 
         File f = file_of(s);
+
+#ifdef HORDE
+		pawnFileCnt[f]++;
+#endif
 
         e->semiopenFiles[Us] &= ~(1 << f);
         e->pawnAttacksSpan[Us] |= pawn_attack_span(Us, s);
@@ -179,8 +191,74 @@ namespace {
         // full attack info to evaluate passed pawns. Only the frontmost passed
         // pawn on each file is considered a true passed pawn.
 #ifdef HORDE
-        if (pos.is_horde())
-            passed = !opposed;
+		if (pos.is_horde())
+		{
+			passed = !opposed;
+
+			if (Us == WHITE)
+			{
+				if (f == FILE_A || f == FILE_H)
+				{
+					//Weak pawn
+					score -= make_score(10, 0);
+				}
+
+				int supporterCnt = popcount<Max15>(supported);
+
+				int attackerCnt = popcount<Max15>(pos.attackers_to(s));
+				if (supporterCnt <= attackerCnt && supporterCnt <= 2)
+				{
+					score -= UnsupportedPawnPenalty;
+				}
+
+				// Score this pawn
+				if (isolated)
+				{
+					score -= Isolated[opposed][f];
+					score -= make_score(50, 50);
+				}
+
+				if (backward)
+				{
+					score -= Backward[opposed];
+				}
+
+				if (!supported)
+				{
+					score -= UnsupportedPawnPenalty;
+					score -= make_score(10, 10);
+				}					
+
+				if (connected)
+				{
+					score += Connected[opposed][!!phalanx][more_than_one(supported)][relative_rank(Us, s)];
+				}
+
+				//if (doubled)
+				//	score -= Doubled[f] / distance<Rank>(s, frontmost_sq(Us, doubled));
+
+				if (lever)
+				{
+					score += Lever[relative_rank(Us, s)];
+				}
+
+				//Pawns are better pushed up the board
+				int rankVal = int(rank_of(s)) * 6;
+				score += make_score(rankVal, rankVal);
+
+			}
+			else if (Us == BLACK)
+			{
+				//We don't want pawns cramped on 2nd rank
+				Square blockSq = s + pawn_push(Us);
+				if (!pos.empty(blockSq) && relative_rank(Us, s) == RANK_2)
+				{
+					score -= make_score(75, 75);
+				}
+			}
+
+			continue;
+		}
 #endif
         if (passed && !doubled)
             e->passedPawns[Us] |= s;
@@ -204,6 +282,30 @@ namespace {
         if (lever)
             score += Lever[relative_rank(Us, s)];
     }
+
+#ifdef HORDE
+	if (pos.is_horde())
+	{
+		if (Us == WHITE)
+		{
+			float average = 0;
+			for (int f = 0; f < FILE_NB; f++)
+			{
+				average += pawnFileCnt[f];
+			}
+			average /= (float)FILE_NB;
+			average = ceil(average);
+			for (int f = 0; f < FILE_NB; f++)
+			{
+				//Easy to break through, would take only one sacrifice
+				if (pawnFileCnt[f] <= average - 2 || pawnFileCnt[f] < 3)
+				{
+					score -= make_score(50, 50);
+				}
+			}
+		}
+	}
+#endif
 
     b = e->semiopenFiles[Us] ^ 0xFF;
     e->pawnSpan[Us] = b ? int(msb(b) - lsb(b)) : 0;

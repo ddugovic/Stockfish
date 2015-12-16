@@ -132,9 +132,22 @@ void MovePicker::score<CAPTURES>() {
   // In main search we want to push captures with negative SEE values to the
   // badCaptures[] array, but instead of doing it now we delay until the move
   // has been picked up, saving some SEE calls in case we get a cutoff.
-  for (auto& m : *this)
-      m.value =  PieceValue[MG][pos.piece_on(to_sq(m))]
-               - Value(200 * relative_rank(pos.side_to_move(), to_sq(m)));
+#ifdef HORDE
+	if (pos.is_horde())
+	{
+		for (auto& m : *this)
+			m.value = HordeValue[MG][pos.piece_on(to_sq(m))]
+			- Value(200 * relative_rank(pos.side_to_move(), to_sq(m)));
+	}
+	else
+	{
+#endif
+		for (auto& m : *this)
+			m.value = PieceValue[MG][pos.piece_on(to_sq(m))]
+			- Value(200 * relative_rank(pos.side_to_move(), to_sq(m)));
+#ifdef HORDE
+	}
+#endif
 }
 
 template<>
@@ -147,20 +160,34 @@ void MovePicker::score<QUIETS>() {
 
 template<>
 void MovePicker::score<EVASIONS>() {
-  // Try winning and equal captures captures ordered by MVV/LVA, then non-captures
-  // ordered by history value, then bad-captures and quiet moves with a negative
-  // SEE ordered by SEE value.
-  Value see;
+	// Try winning and equal captures captures ordered by MVV/LVA, then non-captures
+	// ordered by history value, then bad-captures and quiet moves with a negative
+	// SEE ordered by SEE value.
+	Value see;
 
-  for (auto& m : *this)
-      if ((see = pos.see_sign(m)) < VALUE_ZERO)
-          m.value = see - HistoryStats::Max; // At the bottom
+	for (auto& m : *this)
+		if ((see = pos.see_sign(m)) < VALUE_ZERO)
+			m.value = see - HistoryStats::Max; // At the bottom
+		else
+		{
 
-      else if (pos.capture(m))
-          m.value =  PieceValue[MG][pos.piece_on(to_sq(m))]
-                   - Value(type_of(pos.moved_piece(m))) + HistoryStats::Max;
-      else
-          m.value = history[pos.moved_piece(m)][to_sq(m)];
+#ifdef HORDE
+		  if (pos.is_horde() && pos.capture(m))
+			   m.value = HordeValue[MG][pos.piece_on(to_sq(m))]
+			   - Value(type_of(pos.moved_piece(m))) + HistoryStats::Max;
+		  else
+		  {
+#endif
+			  if (pos.capture(m))
+				  m.value = PieceValue[MG][pos.piece_on(to_sq(m))]
+				  - Value(type_of(pos.moved_piece(m))) + HistoryStats::Max;
+			  else
+				  m.value = history[pos.moved_piece(m)][to_sq(m)];
+#ifdef HORDE
+		  }
+#endif
+		}
+
 }
 
 

@@ -66,10 +66,10 @@ static FD open_tb(const char *str, const char *suffix)
   char file[256];
 
   for (i = 0; i < num_paths; i++) {
-    strcpy(file, paths[i]);
-    strcat(file, "/");
-    strcat(file, str);
-    strcat(file, suffix);
+    strcpy_s(file, paths[i]);
+    strcat_s(file, "/");
+    strcat_s(file, str);
+    strcat_s(file, suffix);
 #ifndef _WIN32
     fd = open(file, O_RDONLY);
 #else

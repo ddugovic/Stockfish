@@ -37,6 +37,13 @@ Value PieceValue[PHASE_NB][PIECE_NB] = {
 { VALUE_ZERO, PawnValueMg, KnightValueMg, BishopValueMg, RookValueMg, QueenValueMg },
 { VALUE_ZERO, PawnValueEg, KnightValueEg, BishopValueEg, RookValueEg, QueenValueEg } };
 
+#ifdef HORDE
+Value HordeValue[PHASE_NB][PIECE_NB] = {
+	{ VALUE_ZERO, PawnValueMg + 5, PawnValueMg, PawnValueMg, PawnValueMg, QueenValueMg * 2, VALUE_ZERO, VALUE_ZERO, VALUE_ZERO, PawnValueMg + 25, (PawnValueMg * 2) + 35, (PawnValueMg * 2) + 35, (PawnValueMg * 3) + 70, QueenValueMg },
+	{ VALUE_ZERO, PawnValueEg + 5, PawnValueEg, PawnValueEg, PawnValueEg, QueenValueEg * 2, VALUE_ZERO, VALUE_ZERO, VALUE_ZERO, PawnValueEg + 25, (PawnValueMg * 2) + 35, (PawnValueMg * 2) + 35, (PawnValueEg * 3) + 70, QueenValueMg } };
+
+#endif
+
 namespace Zobrist {
 
   Key psq[COLOR_NB][PIECE_TYPE_NB][SQUARE_NB];
@@ -264,6 +271,7 @@ void Position::set(const string& fenStr, int var, Thread* th) {
    6) Fullmove number. The number of the full move. It starts at 1, and is
       incremented after Black's move.
 */
+  
 
   unsigned char col, row, token;
   size_t idx;
@@ -271,6 +279,8 @@ void Position::set(const string& fenStr, int var, Thread* th) {
   std::istringstream ss(fenStr);
 
   clear();
+  variant = var;
+
   ss >> std::noskipws;
 
   // 1. Piece placement
@@ -388,8 +398,7 @@ void Position::set(const string& fenStr, int var, Thread* th) {
   // Convert from fullmove starting from 1 to ply starting from 0,
   // handle also common incorrect FEN with fullmove = 0.
   gamePly = std::max(2 * (gamePly - 1), 0) + (sideToMove == BLACK);
-
-  variant = var;
+  
   thisThread = th;
   set_state(st);
 
@@ -455,7 +464,18 @@ void Position::set_state(StateInfo* si) const {
       Square s = pop_lsb(&b);
       Piece pc = piece_on(s);
       si->key ^= Zobrist::psq[color_of(pc)][type_of(pc)][s];
-      si->psq += PSQT::psq[color_of(pc)][type_of(pc)][s];
+#ifdef HORDE
+	  if (is_horde())
+	  {
+		  si->psq += PSQT::hpsq[color_of(pc)][type_of(pc)][s];
+	  }
+	  else
+	  {
+#endif
+		  si->psq += PSQT::psq[color_of(pc)][type_of(pc)][s];
+#ifdef HORDE
+	  }
+#endif
   }
 
   if (si->epSquare != SQ_NONE)
@@ -477,9 +497,23 @@ void Position::set_state(StateInfo* si) const {
           for (int cnt = 0; cnt < pieceCount[c][pt]; ++cnt)
               si->materialKey ^= Zobrist::psq[c][pt][cnt];
 
-  for (Color c = WHITE; c <= BLACK; ++c)
-      for (PieceType pt = KNIGHT; pt <= QUEEN; ++pt)
-          si->nonPawnMaterial[c] += pieceCount[c][pt] * PieceValue[MG][pt];
+#ifdef HORDE
+  if (is_horde())
+  {
+	  for (Color c = WHITE; c <= BLACK; ++c)
+		  for (PieceType pt = KNIGHT; pt <= QUEEN; ++pt)
+			  si->nonPawnMaterial[c] += pieceCount[c][pt] * HordeValue[MG][pt];
+  }
+  else
+  {
+#endif
+
+	  for (Color c = WHITE; c <= BLACK; ++c)
+		  for (PieceType pt = KNIGHT; pt <= QUEEN; ++pt)
+			  si->nonPawnMaterial[c] += pieceCount[c][pt] * PieceValue[MG][pt];
+#ifdef HORDE
+  }
+#endif
 
 #ifdef THREECHECK
   for (Color c = WHITE; c <= BLACK; ++c)
@@ -936,239 +970,310 @@ bool Position::gives_check(Move m, const CheckInfo& ci) const {
 
 void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
 
-  assert(is_ok(m));
-  assert(&newSt != st);
+	assert(is_ok(m));
+	assert(&newSt != st);
 
-  ++nodes;
-  Key k = st->key ^ Zobrist::side;
+	++nodes;
+	Key k = st->key ^ Zobrist::side;
 
-  // Copy some fields of the old state to our new StateInfo object except the
-  // ones which are going to be recalculated from scratch anyway and then switch
-  // our state pointer to point to the new (ready to be updated) state.
-  std::memcpy(&newSt, st, offsetof(StateInfo, key));
-  newSt.previous = st;
-  st = &newSt;
+	// Copy some fields of the old state to our new StateInfo object except the
+	// ones which are going to be recalculated from scratch anyway and then switch
+	// our state pointer to point to the new (ready to be updated) state.
+	std::memcpy(&newSt, st, offsetof(StateInfo, key));
+	newSt.previous = st;
+	st = &newSt;
 
-  // Increment ply counters. In particular, rule50 will be reset to zero later on
-  // in case of a capture or a pawn move.
-  ++gamePly;
-  ++st->rule50;
-  ++st->pliesFromNull;
+	// Increment ply counters. In particular, rule50 will be reset to zero later on
+	// in case of a capture or a pawn move.
+	++gamePly;
+	++st->rule50;
+	++st->pliesFromNull;
 
-  Color us = sideToMove;
-  Color them = ~us;
-  Square from = from_sq(m);
-  Square to = to_sq(m);
-  PieceType pt = type_of(piece_on(from));
-  PieceType captured = type_of(m) == ENPASSANT ? PAWN : type_of(piece_on(to));
+	Color us = sideToMove;
+	Color them = ~us;
+	Square from = from_sq(m);
+	Square to = to_sq(m);
+	PieceType pt = type_of(piece_on(from));
+	PieceType captured = type_of(m) == ENPASSANT ? PAWN : type_of(piece_on(to));
 
-  assert(color_of(piece_on(from)) == us);
-  assert(piece_on(to) == NO_PIECE || color_of(piece_on(to)) == (type_of(m) != CASTLING ? them : us));
-  assert(captured != KING);
+	assert(color_of(piece_on(from)) == us);
+	assert(piece_on(to) == NO_PIECE || color_of(piece_on(to)) == (type_of(m) != CASTLING ? them : us));
+	assert(captured != KING);
 
-  if (type_of(m) == CASTLING)
-  {
-      assert(pt == KING);
+	if (type_of(m) == CASTLING)
+	{
+		assert(pt == KING);
 
-      Square rfrom, rto;
-      do_castling<true>(us, from, to, rfrom, rto);
+		Square rfrom, rto;
+		do_castling<true>(us, from, to, rfrom, rto);
 
-      captured = NO_PIECE_TYPE;
-      st->psq += PSQT::psq[us][ROOK][rto] - PSQT::psq[us][ROOK][rfrom];
-      k ^= Zobrist::psq[us][ROOK][rfrom] ^ Zobrist::psq[us][ROOK][rto];
-  }
-
-  if (captured)
-  {
-      Square capsq = to;
-
-      // If the captured piece is a pawn, update pawn hash key, otherwise
-      // update non-pawn material.
-      if (captured == PAWN)
-      {
-          if (type_of(m) == ENPASSANT)
-          {
-              capsq -= pawn_push(us);
-
-              assert(pt == PAWN);
-              assert(to == st->epSquare);
+		captured = NO_PIECE_TYPE;
 #ifdef HORDE
-              assert((is_horde() && rank_of(to) == RANK_2) ||
-                     relative_rank(us, to) == RANK_6);
+		if (is_horde())
+		{
+			st->psq += PSQT::hpsq[us][ROOK][rto] - PSQT::hpsq[us][ROOK][rfrom];
+		}
+		else
+		{
+#endif
+			st->psq += PSQT::psq[us][ROOK][rto] - PSQT::psq[us][ROOK][rfrom];
+#ifdef HORDE
+		}
+#endif
+		k ^= Zobrist::psq[us][ROOK][rfrom] ^ Zobrist::psq[us][ROOK][rto];
+	}
+
+	if (captured)
+	{
+		Square capsq = to;
+
+		// If the captured piece is a pawn, update pawn hash key, otherwise
+		// update non-pawn material.
+		if (captured == PAWN)
+		{
+			if (type_of(m) == ENPASSANT)
+			{
+				capsq -= pawn_push(us);
+
+				assert(pt == PAWN);
+				assert(to == st->epSquare);
+#ifdef HORDE
+				assert((is_horde() && rank_of(to) == RANK_2) ||
+					relative_rank(us, to) == RANK_6);
 #else
-              assert(relative_rank(us, to) == RANK_6);
+				assert(relative_rank(us, to) == RANK_6);
 #endif
-              assert(piece_on(to) == NO_PIECE);
-              assert(piece_on(capsq) == make_piece(them, PAWN));
+				assert(piece_on(to) == NO_PIECE);
+				assert(piece_on(capsq) == make_piece(them, PAWN));
 
-              board[capsq] = NO_PIECE; // Not done by remove_piece()
-          }
+				board[capsq] = NO_PIECE; // Not done by remove_piece()
+			}
 
-          st->pawnKey ^= Zobrist::psq[them][PAWN][capsq];
-      }
-      else
-          st->nonPawnMaterial[them] -= PieceValue[MG][captured];
+			st->pawnKey ^= Zobrist::psq[them][PAWN][capsq];
+		}
+		else
+		{
+#ifdef HORDE
+			if (is_horde())
+			{
+				st->nonPawnMaterial[them] -= HordeValue[MG][captured];
+			}
+			else
+			{
+#endif
+				st->nonPawnMaterial[them] -= PieceValue[MG][captured];
+#ifdef HORDE
+			}
+#endif
+		}
 
-      // Update board and piece lists
-      remove_piece(them, captured, capsq);
+		// Update board and piece lists
+		remove_piece(them, captured, capsq);
 
-      // Update material hash key and prefetch access to materialTable
-      k ^= Zobrist::psq[them][captured][capsq];
-      st->materialKey ^= Zobrist::psq[them][captured][pieceCount[them][captured]];
+		// Update material hash key and prefetch access to materialTable
+		k ^= Zobrist::psq[them][captured][capsq];
+		st->materialKey ^= Zobrist::psq[them][captured][pieceCount[them][captured]];
 #ifdef ATOMIC
-      if (is_atomic()) // Remove the blast piece(s)
-      {
-          Bitboard blast = attacks_from<KING>(to);
-          while (blast)
-          {
-              Square bsq = pop_lsb(&blast);
-              if (bsq == from)
-                  continue;
-              st->blast[bsq] = piece_on(bsq);
-              PieceType bpt = type_of(st->blast[bsq]);
-              if (bpt != NO_PIECE_TYPE && bpt != PAWN)
-              {
-                  Color bc = color_of(st->blast[bsq]);
-                  st->nonPawnMaterial[bc] -= PieceValue[MG][bpt];
+		if (is_atomic()) // Remove the blast piece(s)
+		{
+			Bitboard blast = attacks_from<KING>(to);
+			while (blast)
+			{
+				Square bsq = pop_lsb(&blast);
+				if (bsq == from)
+					continue;
+				st->blast[bsq] = piece_on(bsq);
+				PieceType bpt = type_of(st->blast[bsq]);
+				if (bpt != NO_PIECE_TYPE && bpt != PAWN)
+				{
+					Color bc = color_of(st->blast[bsq]);
+					st->nonPawnMaterial[bc] -= PieceValue[MG][bpt];
 
-                  // Update board and piece lists
-                  remove_piece(bc, bpt, bsq);
+					// Update board and piece lists
+					remove_piece(bc, bpt, bsq);
 
-                  // Update material hash key
-                  k ^= Zobrist::psq[bc][bpt][bsq];
-                  st->materialKey ^= Zobrist::psq[bc][bpt][pieceCount[bc][bpt]];
+					// Update material hash key
+					k ^= Zobrist::psq[bc][bpt][bsq];
+					st->materialKey ^= Zobrist::psq[bc][bpt][pieceCount[bc][bpt]];
 
-                  // Update incremental scores
-                  st->psq -= PSQT::psq[bc][bpt][bsq];
+					// Update incremental scores
+					st->psq -= PSQT::psq[bc][bpt][bsq];
 
-                  // Update castling rights if needed
-                  if (st->castlingRights && castlingRightsMask[bsq])
-                  {
-                      int cr = castlingRightsMask[bsq];
-                      k ^= Zobrist::castling[st->castlingRights & cr];
-                      st->castlingRights &= ~cr;
-                  }
-              }
-          }
-      }
+					// Update castling rights if needed
+					if (st->castlingRights && castlingRightsMask[bsq])
+					{
+						int cr = castlingRightsMask[bsq];
+						k ^= Zobrist::castling[st->castlingRights & cr];
+						st->castlingRights &= ~cr;
+					}
+				}
+			}
+		}
 #endif
 
-      prefetch(thisThread->materialTable[st->materialKey]);
+		prefetch(thisThread->materialTable[st->materialKey]);
 
-      // Update incremental scores
-      st->psq -= PSQT::psq[them][captured][capsq];
+		// Update incremental scores
+#ifdef HORDE
+		if (is_horde())
+		{
+			st->psq -= PSQT::hpsq[them][captured][capsq];
+		}
+		else
+		{
+#endif
+			st->psq -= PSQT::psq[them][captured][capsq];
+#ifdef HORDE
+		}
+#endif
 
-      // Reset rule 50 counter
-      st->rule50 = 0;
-  }
+		// Reset rule 50 counter
+		st->rule50 = 0;
+	}
 
 #ifdef ATOMIC
-  if (is_atomic() && captured)
-      k ^= Zobrist::psq[us][pt][from];
-  else
+	if (is_atomic() && captured)
+		k ^= Zobrist::psq[us][pt][from];
+	else
 #endif
-  // Update hash key
-  k ^= Zobrist::psq[us][pt][from] ^ Zobrist::psq[us][pt][to];
+		// Update hash key
+		k ^= Zobrist::psq[us][pt][from] ^ Zobrist::psq[us][pt][to];
 
-  // Reset en passant square
-  if (st->epSquare != SQ_NONE)
-  {
-      k ^= Zobrist::enpassant[file_of(st->epSquare)];
-      st->epSquare = SQ_NONE;
-  }
+	// Reset en passant square
+	if (st->epSquare != SQ_NONE)
+	{
+		k ^= Zobrist::enpassant[file_of(st->epSquare)];
+		st->epSquare = SQ_NONE;
+	}
 
-  // Update castling rights if needed
-  if (st->castlingRights && (castlingRightsMask[from] | castlingRightsMask[to]))
-  {
-      int cr = castlingRightsMask[from] | castlingRightsMask[to];
-      k ^= Zobrist::castling[st->castlingRights & cr];
-      st->castlingRights &= ~cr;
-  }
+	// Update castling rights if needed
+	if (st->castlingRights && (castlingRightsMask[from] | castlingRightsMask[to]))
+	{
+		int cr = castlingRightsMask[from] | castlingRightsMask[to];
+		k ^= Zobrist::castling[st->castlingRights & cr];
+		st->castlingRights &= ~cr;
+	}
 
 #ifdef THREECHECK
-  if (is_three_check() && givesCheck)
-  {
-      ++(st->checksGiven[sideToMove]);
-      Checks checksGiven = checks_given();
-      assert(checksGiven < CHECKS_NB);
-      k ^= Zobrist::checks[sideToMove][checksGiven];
-  }
+	if (is_three_check() && givesCheck)
+	{
+		++(st->checksGiven[sideToMove]);
+		Checks checksGiven = checks_given();
+		assert(checksGiven < CHECKS_NB);
+		k ^= Zobrist::checks[sideToMove][checksGiven];
+	}
 #endif
 
 #ifdef ATOMIC
-  if (is_atomic() && captured) // Remove the blast piece(s)
-  {
-      st->blast[from] = piece_on(from);
-      remove_piece(us, pt, from);
-      // Update material (hash key already updated)
-      st->materialKey ^= Zobrist::psq[us][pt][pieceCount[us][pt]];
-      if (pt != PAWN)
-          st->nonPawnMaterial[us] -= PieceValue[MG][pt];
-  }
-  else
+	if (is_atomic() && captured) // Remove the blast piece(s)
+	{
+		st->blast[from] = piece_on(from);
+		remove_piece(us, pt, from);
+		// Update material (hash key already updated)
+		st->materialKey ^= Zobrist::psq[us][pt][pieceCount[us][pt]];
+		if (pt != PAWN)
+			st->nonPawnMaterial[us] -= PieceValue[MG][pt];
+	}
+	else
 #endif
-  // Move the piece. The tricky Chess960 castling is handled earlier
-  if (type_of(m) != CASTLING)
-      move_piece(us, pt, from, to);
+		// Move the piece. The tricky Chess960 castling is handled earlier
+		if (type_of(m) != CASTLING)
+			move_piece(us, pt, from, to);
 
-  // If the moving piece is a pawn do some special extra work
-  if (pt == PAWN)
-  {
-      // Set en-passant square if the moved pawn can be captured
-      if (   (int(to) ^ int(from)) == 16
-          && (attacks_from<PAWN>(to - pawn_push(us), us) & pieces(them, PAWN)))
-      {
-          st->epSquare = (from + to) / 2;
-          k ^= Zobrist::enpassant[file_of(st->epSquare)];
-      }
+	// If the moving piece is a pawn do some special extra work
+	if (pt == PAWN)
+	{
+		// Set en-passant square if the moved pawn can be captured
+		if ((int(to) ^ int(from)) == 16
+			&& (attacks_from<PAWN>(to - pawn_push(us), us) & pieces(them, PAWN)))
+		{
+			st->epSquare = (from + to) / 2;
+			k ^= Zobrist::enpassant[file_of(st->epSquare)];
+		}
 #ifdef ATOMIC
-      else if (is_atomic() && captured)
-      {
-      }
+		else if (is_atomic() && captured)
+		{
+		}
 #endif
-      else if (type_of(m) == PROMOTION)
-      {
-          PieceType promotion = promotion_type(m);
+		else if (type_of(m) == PROMOTION)
+		{
+			PieceType promotion = promotion_type(m);
 
-          assert(relative_rank(us, to) == RANK_8);
-          assert(promotion >= KNIGHT && promotion <= QUEEN);
+			assert(relative_rank(us, to) == RANK_8);
+			assert(promotion >= KNIGHT && promotion <= QUEEN);
 
-          remove_piece(us, PAWN, to);
-          put_piece(us, promotion, to);
+			remove_piece(us, PAWN, to);
+			put_piece(us, promotion, to);
 
-          // Update hash keys
-          k ^= Zobrist::psq[us][PAWN][to] ^ Zobrist::psq[us][promotion][to];
-          st->pawnKey ^= Zobrist::psq[us][PAWN][to];
-          st->materialKey ^=  Zobrist::psq[us][promotion][pieceCount[us][promotion]-1]
-                            ^ Zobrist::psq[us][PAWN][pieceCount[us][PAWN]];
+			// Update hash keys
+			k ^= Zobrist::psq[us][PAWN][to] ^ Zobrist::psq[us][promotion][to];
+			st->pawnKey ^= Zobrist::psq[us][PAWN][to];
+			st->materialKey ^= Zobrist::psq[us][promotion][pieceCount[us][promotion] - 1]
+				^ Zobrist::psq[us][PAWN][pieceCount[us][PAWN]];
 
-          // Update incremental score
-          st->psq += PSQT::psq[us][promotion][to] - PSQT::psq[us][PAWN][to];
-
-          // Update material
-          st->nonPawnMaterial[us] += PieceValue[MG][promotion];
-      }
+			// Update incremental score
+#ifdef HORDE
+			if (is_horde())
+			{
+				st->psq += PSQT::hpsq[us][promotion][to] - PSQT::hpsq[us][PAWN][to];
+			}
+			else
+			{
+#endif
+				st->psq += PSQT::psq[us][promotion][to] - PSQT::psq[us][PAWN][to];
+#ifdef HORDE
+			}
+#endif
+			// Update material
+#ifdef HORDE
+			if (is_horde())
+			{
+				st->nonPawnMaterial[us] += HordeValue[MG][promotion];
+			}
+			else
+			{
+#endif
+				st->nonPawnMaterial[us] += PieceValue[MG][promotion];
+#ifdef HORDE
+			}
+#endif
+		}
 
 #ifdef ATOMIC
-      if (is_atomic() && captured)
-          st->pawnKey ^= Zobrist::psq[us][PAWN][from];
-      else
+		if (is_atomic() && captured)
+			st->pawnKey ^= Zobrist::psq[us][PAWN][from];
+		else
 #endif
-      // Update pawn hash key and prefetch access to pawnsTable
-      st->pawnKey ^= Zobrist::psq[us][PAWN][from] ^ Zobrist::psq[us][PAWN][to];
-      prefetch(thisThread->pawnsTable[st->pawnKey]);
+			// Update pawn hash key and prefetch access to pawnsTable
+			st->pawnKey ^= Zobrist::psq[us][PAWN][from] ^ Zobrist::psq[us][PAWN][to];
+		prefetch(thisThread->pawnsTable[st->pawnKey]);
 
-      // Reset rule 50 draw counter
-      st->rule50 = 0;
-  }
+		// Reset rule 50 draw counter
+		st->rule50 = 0;
+	}
 
 #ifdef ATOMIC
-  if (is_atomic() && captured)
-      st->psq -= PSQT::psq[us][pt][from];
-  else
+	if (is_atomic() && captured)
+		st->psq -= PSQT::psq[us][pt][from];
+	else
+	{
 #endif
-  // Update incremental scores
-  st->psq += PSQT::psq[us][pt][to] - PSQT::psq[us][pt][from];
+		// Update incremental scores
+#ifdef HORDE
+		if (is_horde())
+		{
+			st->psq += PSQT::hpsq[us][pt][to] - PSQT::hpsq[us][pt][from];
+		}
+		else
+		{
+#endif
+			st->psq += PSQT::psq[us][pt][to] - PSQT::psq[us][pt][from];
+#ifdef HORDE
+		}
+#endif
+#ifdef ATOMIC
+	}
+#endif
 
   // Set capture piece
   st->capturedType = captured;
@@ -1253,7 +1358,18 @@ void Position::undo_move(Move m) {
 
               assert(pt == PAWN);
               assert(to == st->previous->epSquare);
-              assert(relative_rank(us, to) == RANK_6);
+#ifdef HORDE
+			  if (is_horde())
+			  {
+				  assert(relative_rank(us, to) == RANK_6 || relative_rank(us, to) == RANK_7);
+			  }
+			  else
+			  {
+#endif
+				  assert(relative_rank(us, to) == RANK_6);
+#ifdef HORDE
+			  }
+#endif
               assert(piece_on(capsq) == NO_PIECE);
               assert(st->capturedType == PAWN);
           }
@@ -1386,8 +1502,21 @@ Value Position::see_sign(Move m) const {
   // Early return if SEE cannot be negative because captured piece value
   // is not less then capturing one. Note that king moves always return
   // here because king midgame value is set to 0.
-  if (PieceValue[MG][moved_piece(m)] <= PieceValue[MG][piece_on(to_sq(m))])
-      return VALUE_KNOWN_WIN;
+
+#ifdef HORDE
+  if (is_horde())
+  {
+	  if (HordeValue[MG][moved_piece(m)] <= HordeValue[MG][piece_on(to_sq(m))])
+		  return VALUE_KNOWN_WIN;
+  }
+  else
+  {
+#endif
+	  if (PieceValue[MG][moved_piece(m)] <= PieceValue[MG][piece_on(to_sq(m))])
+		  return VALUE_KNOWN_WIN;
+#ifdef HORDE
+  }
+#endif
 
   return see(m);
 }
@@ -1409,7 +1538,18 @@ Value Position::see(Move m) const {
 
   from = from_sq(m);
   to = to_sq(m);
-  swapList[0] = PieceValue[MG][piece_on(to)];
+#ifdef HORDE
+  if (is_horde())
+  {
+	  swapList[0] = HordeValue[MG][piece_on(to)];
+  }
+  else
+  {
+#endif
+	  swapList[0] = PieceValue[MG][piece_on(to)];
+#ifdef HORDE
+  }
+#endif
   stm = color_of(piece_on(from));
   occupied = pieces() ^ from;
 
@@ -1422,7 +1562,18 @@ Value Position::see(Move m) const {
   if (type_of(m) == ENPASSANT)
   {
       occupied ^= to - pawn_push(stm); // Remove the captured pawn
-      swapList[0] = PieceValue[MG][PAWN];
+#ifdef HORDE
+	  if (is_horde())
+	  {
+		  swapList[0] = HordeValue[MG][PAWN];
+	  }
+	  else
+	  {
+#endif
+		  swapList[0] = PieceValue[MG][PAWN];
+#ifdef HORDE
+	  }
+#endif
   }
 
   // Find all attackers to the destination square, with the moving piece
@@ -1451,7 +1602,18 @@ Value Position::see(Move m) const {
 #endif
 
       // Add the new entry to the swap list
-      swapList[slIndex] = -swapList[slIndex - 1] + PieceValue[MG][captured];
+#ifdef HORDE
+	  if (is_horde())
+	  {
+		  swapList[slIndex] = -swapList[slIndex - 1] + HordeValue[MG][captured];
+	  }
+	  else
+	  {
+#endif
+		  swapList[slIndex] = -swapList[slIndex - 1] + PieceValue[MG][captured];
+#ifdef HORDE
+	  }
+#endif
 
       // Locate and remove the next least valuable attacker
       captured = min_attacker<PAWN>(byTypeBB, to, stmAttackers, occupied, attackers);
