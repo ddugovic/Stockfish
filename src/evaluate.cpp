@@ -165,11 +165,20 @@ namespace {
    { S(0, 0), S(0, 27), S(26, 57), S(26, 57), S( 0, 30), S(23, 51) }  // Rook attacks
   };
 
+#ifdef HORDE
+  const Score HordeThreat[2][PIECE_TYPE_NB] = {
+	  { S(100, 150), S(100, 150), S(25, 39), S(28, 44), S(42, 98), S(35,105) }, // Minor attacks
+	  { S(75, 100), S(75, 100), S(26, 57), S(26, 57), S(0, 30), S(23, 51) }  // Rook attacks
+  };
+#endif
+
   // ThreatenedByPawn[PieceType] contains a penalty according to which piece
   // type is attacked by a pawn.
   const Score ThreatenedByPawn[PIECE_TYPE_NB] = {
     S(0, 0), S(0, 0), S(107, 138), S(84, 122), S(114, 203), S(121, 217)
   };
+
+
 
   // Passed[mg/eg][Rank] contains midgame and endgame bonuses for passed pawns.
   // We don't use a Score because we process the two components independently.
@@ -201,6 +210,10 @@ namespace {
   const Score RookOnPawn         = S( 7, 27);
   const Score RookOnOpenFile     = S(43, 21);
   const Score RookOnSemiOpenFile = S(19, 10);
+#ifdef HORDE
+  const Score HRookOnOpenFile = S(19, 0);
+  const Score HRookOnSemiOpenFile = S(50, 50);
+#endif
   const Score BishopPawns        = S( 8, 12);
   const Score MinorBehindPawn    = S(16,  0);
   const Score TrappedRook        = S(92,  0);
@@ -300,10 +313,12 @@ namespace {
                 ei.kingAdjacentZoneAttacksCount[Us] += popcount<Max15>(bb);
         }
 
-        if (Pt == QUEEN)
-            b &= ~(  ei.attackedBy[Them][KNIGHT]
-                   | ei.attackedBy[Them][BISHOP]
-                   | ei.attackedBy[Them][ROOK]);
+		if (Pt == QUEEN)
+		{
+			b &= ~(ei.attackedBy[Them][KNIGHT]
+				| ei.attackedBy[Them][BISHOP]
+				| ei.attackedBy[Them][ROOK]);
+		}
 
         int mob = popcount<Pt == QUEEN ? Full : Max15>(b & mobilityArea[Us]);
 
@@ -348,30 +363,60 @@ namespace {
 
         if (Pt == ROOK)
         {
-            // Bonus for aligning with enemy pawns on the same rank/file
-            if (relative_rank(Us, s) >= RANK_5)
-            {
-                Bitboard alignedPawns = pos.pieces(Them, PAWN) & PseudoAttacks[ROOK][s];
-                if (alignedPawns)
-                    score += popcount<Max15>(alignedPawns) * RookOnPawn;
-            }
+#ifdef HORDE
+			if (pos.is_horde() && Us == BLACK)
+			{
+				int blackPawnCount = pos.pieces(BLACK, PAWN);
+				if (blackPawnCount < 1 && relative_rank(Us, s) == RANK_1)
+				{
+					//Back rank bonus when horde is peaking
+					score += make_score(35, 35);
+				}
 
-            // Bonus when on an open or semi-open file
-            if (ei.pi->semiopen_file(Us, file_of(s)))
-            {
-                score += ei.pi->semiopen_file(Them, file_of(s)) ? RookOnOpenFile : RookOnSemiOpenFile;
-            }
+				// Bonus for aligning with enemy pawns on the same rank/file
+				if (relative_rank(Us, s) >= RANK_4)
+				{
+					Bitboard alignedPawns = pos.pieces(Them, PAWN) & PseudoAttacks[ROOK][s];
+					if (alignedPawns)
+						score += popcount<Max15>(alignedPawns) * RookOnPawn;
+				}
 
-            // Penalize when trapped by the king, even more if king cannot castle
-            if (mob <= 3 && !ei.pi->semiopen_file(Us, file_of(s)))
-            {
-                Square ksq = pos.square<KING>(Us);
+				// Bonus when on an open or semi-open file
+				if (ei.pi->semiopen_file(Us, file_of(s)) && Us == BLACK)
+				{
+					score += ei.pi->semiopen_file(Them, file_of(s)) ? HRookOnOpenFile : HRookOnSemiOpenFile;
+				}
+			}
+			else
+			{
+#endif
+				// Bonus for aligning with enemy pawns on the same rank/file
+				if (relative_rank(Us, s) >= RANK_5)
+				{
+					Bitboard alignedPawns = pos.pieces(Them, PAWN) & PseudoAttacks[ROOK][s];
+					if (alignedPawns)
+						score += popcount<Max15>(alignedPawns) * RookOnPawn;
+				}
 
-                if (   ((file_of(ksq) < FILE_E) == (file_of(s) < file_of(ksq)))
-                    && (rank_of(ksq) == rank_of(s) || relative_rank(Us, ksq) == RANK_1)
-                    && !ei.pi->semiopen_side(Us, file_of(ksq), file_of(s) < file_of(ksq)))
-                    score -= (TrappedRook - make_score(mob * 22, 0)) * (1 + !pos.can_castle(Us));
-            }
+				// Bonus when on an open or semi-open file
+				if (ei.pi->semiopen_file(Us, file_of(s)))
+				{
+					score += ei.pi->semiopen_file(Them, file_of(s)) ? RookOnOpenFile : RookOnSemiOpenFile;
+				}
+
+				// Penalize when trapped by the king, even more if king cannot castle
+				if (mob <= 3 && !ei.pi->semiopen_file(Us, file_of(s)))
+				{
+					Square ksq = pos.square<KING>(Us);
+
+					if (((file_of(ksq) < FILE_E) == (file_of(s) < file_of(ksq)))
+						&& (rank_of(ksq) == rank_of(s) || relative_rank(Us, ksq) == RANK_1)
+						&& !ei.pi->semiopen_side(Us, file_of(ksq), file_of(s) < file_of(ksq)))
+						score -= (TrappedRook - make_score(mob * 22, 0)) * (1 + !pos.can_castle(Us));
+				}
+#ifdef HORDE
+			}
+#endif
         }
     }
 
@@ -401,6 +446,19 @@ namespace {
 
     // King shelter and enemy pawns storm
     Score score = ei.pi->king_safety<Us>(pos, ksq);
+
+#ifdef HORDE
+	if (pos.is_horde() && Us == BLACK)
+	{
+		Rank r = relative_rank(Us, ksq);
+		if (r == RANK_2)
+		{
+			//Helpful for freeing the back rank and helping
+			//attack the horde's pawn structure
+			score += make_score(50, 50);
+		}
+	}
+#endif
 
     // Main king safety evaluation
     if (ei.kingAttackersCount[Them])
@@ -551,15 +609,38 @@ namespace {
           &  ei.attackedBy[Us][ALL_PIECES];
 
     // Add a bonus according to the kind of attacking pieces
-    if (defended | weak)
-    {
-        b = (defended | weak) & (ei.attackedBy[Us][KNIGHT] | ei.attackedBy[Us][BISHOP]);
-        while (b)
-            score += Threat[Minor][type_of(pos.piece_on(pop_lsb(&b)))];
+	if (defended | weak)
+	{
+		b = (defended | weak) & (ei.attackedBy[Us][KNIGHT] | ei.attackedBy[Us][BISHOP]);
+#ifdef HORDE
+		if (pos.is_horde())
+		{
+			while (b)
+				score += HordeThreat[Minor][type_of(pos.piece_on(pop_lsb(&b)))];
+		}
+		else
+		{
+#endif
+			while (b)
+				score += Threat[Minor][type_of(pos.piece_on(pop_lsb(&b)))];
+#ifdef HORDE
+		}
 
-        b = (pos.pieces(Them, QUEEN) | weak) & ei.attackedBy[Us][ROOK];
-        while (b)
-            score += Threat[Rook ][type_of(pos.piece_on(pop_lsb(&b)))];
+		b = (pos.pieces(Them, QUEEN) | weak) & ei.attackedBy[Us][ROOK];
+		if (pos.is_horde())
+		{
+			while (b)
+				score += HordeThreat[Rook][type_of(pos.piece_on(pop_lsb(&b)))];
+		}
+		else
+		{
+#endif
+			
+			while (b)
+				score += Threat[Rook][type_of(pos.piece_on(pop_lsb(&b)))];
+	#ifdef HORDE
+		}
+	#endif
 
         b = weak & ~ei.attackedBy[Them][ALL_PIECES];
         if (b)
@@ -620,12 +701,43 @@ namespace {
             Square blockSq = s + pawn_push(Us);
 
             // Adjust bonus based on the king's proximity
-            ebonus +=  distance(pos.square<KING>(Them), blockSq) * 5 * rr
-                     - distance(pos.square<KING>(Us  ), blockSq) * 2 * rr;
+#ifdef HORDE
+			if (pos.is_horde())
+			{
+				if (Us == WHITE)
+				{
+					ebonus -= distance(pos.square<KING>(BLACK), blockSq) * 5 * rr;
+				}
+				else
+				{
+					ebonus += distance(pos.square<KING>(BLACK), blockSq) * 2 * rr;
+				}
+			}
+			else
+			{
+#endif
+				ebonus += distance(pos.square<KING>(Them), blockSq) * 5 * rr
+					- distance(pos.square<KING>(Us), blockSq) * 2 * rr;
+#ifdef HORDE
+			}
+#endif
 
-            // If blockSq is not the queening square then consider also a second push
-            if (relative_rank(Us, blockSq) != RANK_8)
-                ebonus -= distance(pos.square<KING>(Us), blockSq + pawn_push(Us)) * rr;
+#ifdef HORDE
+			if (pos.is_horde())
+			{
+				// If blockSq is not the queening square then consider also a second push
+				if (relative_rank(Us, blockSq) != RANK_8 && Us == BLACK)
+					ebonus -= distance(pos.square<KING>(Us), blockSq + pawn_push(Us)) * rr;
+			}
+			else
+			{
+#endif
+				// If blockSq is not the queening square then consider also a second push
+				if (relative_rank(Us, blockSq) != RANK_8)
+					ebonus -= distance(pos.square<KING>(Us), blockSq + pawn_push(Us)) * rr;
+#ifdef HORDE
+			}
+#endif
 
             // If the pawn is free to advance, then increase the bonus
             if (pos.empty(blockSq))
@@ -758,6 +870,29 @@ namespace {
   // status of the players.
   Score evaluate_initiative(const Position& pos, int asymmetry, Value eg) {
 
+#ifdef HORDE
+	  if (pos.is_horde())
+	  {
+		  int init = 0;
+
+		  //Amount of pieces on whites 1st and 2nd rank 
+		  Bitboard pieces = pos.pieces(BLACK);
+		  while (pieces)
+		  {
+			  Square sq = pop_lsb(&pieces);
+			  Rank r = relative_rank(BLACK, sq);	  
+
+			  if (r >= RANK_7)
+			  {
+				  PieceType t = type_of(pos.piece_on(sq));
+				  init -= t * (10 - r);
+			  }
+		  }
+
+		  return make_score(init, init);
+	  }
+#endif
+
     int kingDistance = distance<File>(pos.square<KING>(WHITE), pos.square<KING>(BLACK));
     int pawns = pos.count<PAWN>(WHITE) + pos.count<PAWN>(BLACK);
 
@@ -772,7 +907,6 @@ namespace {
     return make_score(0, value);
   }
 
-
   // evaluate_scale_factor() computes the scale factor for the winning side
   ScaleFactor evaluate_scale_factor(const Position& pos, const EvalInfo& ei, Score score) {
 
@@ -781,6 +915,13 @@ namespace {
 
     // If we don't already have an unusual scale factor, check for certain
     // types of endgames, and use a lower scale for those.
+#ifdef HORDE
+	if (pos.is_horde())
+	{
+		return sf;
+	}
+#endif
+
     if (    ei.me->game_phase() < PHASE_MIDGAME
         && (sf == SCALE_FACTOR_NORMAL || sf == SCALE_FACTOR_ONEPAWN))
     {
@@ -812,7 +953,6 @@ namespace {
 
 /// evaluate() is the main evaluation function. It returns a static evaluation
 /// of the position from the point of view of the side to move.
-
 template<bool DoTrace>
 Value Eval::evaluate(const Position& pos) {
 
@@ -825,7 +965,6 @@ Value Eval::evaluate(const Position& pos) {
   // the position object (material + piece square tables). Score is computed
   // internally from the white point of view.
   score = pos.psq_score();
-
 #ifdef KOTH
     // Possibly redundant static evaluator
     if (pos.is_koth())
@@ -941,24 +1080,21 @@ Value Eval::evaluate(const Position& pos) {
 
   // Evaluate space for both sides, only during opening
 #ifdef HORDE
-  if (pos.is_horde())
+  if (!pos.is_horde())
   {
-  if (pos.non_pawn_material(BLACK) + pos.non_pawn_material(BLACK) >= 12222)
-      score += (  evaluate_space<WHITE>(pos, ei)
-                - evaluate_space<BLACK>(pos, ei)) * Weights[Space];
+	  if (pos.non_pawn_material(WHITE) + pos.non_pawn_material(BLACK) >= 12222)
+		  score += (evaluate_space<WHITE>(pos, ei)
+			  - evaluate_space<BLACK>(pos, ei)) * Weights[Space];
   }
-  else
-  {
-#endif
+
+#else
   if (pos.non_pawn_material(WHITE) + pos.non_pawn_material(BLACK) >= 12222)
       score += (  evaluate_space<WHITE>(pos, ei)
                 - evaluate_space<BLACK>(pos, ei)) * Weights[Space];
+#endif
 
   // Evaluate position potential for the winning side
   score += evaluate_initiative(pos, ei.pi->pawn_asymmetry(), eg_value(score));
-#ifdef HORDE
-  }
-#endif
 
   // Evaluate scale factor for the winning side
   ScaleFactor sf = evaluate_scale_factor(pos, ei, score);
@@ -982,6 +1118,8 @@ Value Eval::evaluate(const Position& pos) {
       Trace::add(TOTAL, score);
   }
 
+  std::string evalFen = pos.fen();
+  assert(v >= -VALUE_INFINITE && v <= VALUE_INFINITE);
   return (pos.side_to_move() == WHITE ? v : -v) + Eval::Tempo; // Side to move point of view
 }
 

@@ -880,7 +880,7 @@ void Tablebases::init(const std::string& path)
 	const char *p = path.c_str();
 	if (strlen(p) == 0 || !strcmp(p, "<empty>")) return;
 	path_string = (char *)malloc(strlen(p) + 1);
-	strcpy(path_string, p);
+	strcpy_s(path_string, strlen(p), p);
 	num_paths = 0;
 	for (i = 0;; i++) {
 		if (path_string[i] != SEP_CHAR)
@@ -912,33 +912,33 @@ void Tablebases::init(const std::string& path)
 		DTZ_table[i].entry = NULL;
 
 	for (i = 1; i < 6; i++) {
-		sprintf(str, "K%cvK", pchr[i]);
+		sprintf_s(str, "K%cvK", pchr[i]);
 		init_tb(str);
 	}
 
 	for (i = 1; i < 6; i++)
 		for (j = i; j < 6; j++) {
-			sprintf(str, "K%cvK%c", pchr[i], pchr[j]);
+			sprintf_s(str, "K%cvK%c", pchr[i], pchr[j]);
 			init_tb(str);
 		}
 
 	for (i = 1; i < 6; i++)
 		for (j = i; j < 6; j++) {
-			sprintf(str, "K%c%cvK", pchr[i], pchr[j]);
+			sprintf_s(str, "K%c%cvK", pchr[i], pchr[j]);
 			init_tb(str);
 		}
 
 	for (i = 1; i < 6; i++)
 		for (j = i; j < 6; j++)
 			for (k = 1; k < 6; k++) {
-				sprintf(str, "K%c%cvK%c", pchr[i], pchr[j], pchr[k]);
+				sprintf_s(str, "K%c%cvK%c", pchr[i], pchr[j], pchr[k]);
 				init_tb(str);
 			}
 
 	for (i = 1; i < 6; i++)
 		for (j = i; j < 6; j++)
 			for (k = j; k < 6; k++) {
-				sprintf(str, "K%c%c%cvK", pchr[i], pchr[j], pchr[k]);
+				sprintf_s(str, "K%c%c%cvK", pchr[i], pchr[j], pchr[k]);
 				init_tb(str);
 			}
 
@@ -946,7 +946,7 @@ void Tablebases::init(const std::string& path)
 		for (j = i; j < 6; j++)
 			for (k = i; k < 6; k++)
 				for (l = (i == k) ? j : k; l < 6; l++) {
-					sprintf(str, "K%c%cvK%c%c", pchr[i], pchr[j], pchr[k], pchr[l]);
+					sprintf_s(str, "K%c%cvK%c%c", pchr[i], pchr[j], pchr[k], pchr[l]);
 					init_tb(str);
 				}
 
@@ -954,7 +954,7 @@ void Tablebases::init(const std::string& path)
 		for (j = i; j < 6; j++)
 			for (k = j; k < 6; k++)
 				for (l = 1; l < 6; l++) {
-					sprintf(str, "K%c%c%cvK%c", pchr[i], pchr[j], pchr[k], pchr[l]);
+					sprintf_s(str, "K%c%c%cvK%c", pchr[i], pchr[j], pchr[k], pchr[l]);
 					init_tb(str);
 				}
 
@@ -962,7 +962,7 @@ void Tablebases::init(const std::string& path)
 		for (j = i; j < 6; j++)
 			for (k = j; k < 6; k++)
 				for (l = k; l < 6; l++) {
-					sprintf(str, "K%c%c%c%cvK", pchr[i], pchr[j], pchr[k], pchr[l]);
+					sprintf_s(str, "K%c%c%c%cvK", pchr[i], pchr[j], pchr[k], pchr[l]);
 					init_tb(str);
 				}
 

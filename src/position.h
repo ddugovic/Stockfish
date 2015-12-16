@@ -40,6 +40,7 @@ class Thread;
 namespace PSQT {
 
   extern Score psq[COLOR_NB][PIECE_TYPE_NB][SQUARE_NB];
+  extern Score hpsq[COLOR_NB][PIECE_TYPE_NB][SQUARE_NB];
 
   void init();
 }
@@ -307,6 +308,7 @@ template<PieceType Pt> inline Square Position::square(Color c) const {
 #ifdef HORDE
   if (is_horde() && c == WHITE)
   {
+	  int pc = Pt;
       assert(pieceCount[c][Pt] == 0);
       return SQ_NONE;
   }

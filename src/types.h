@@ -334,6 +334,9 @@ inline Score operator/(Score s, int i) {
 }
 
 extern Value PieceValue[PHASE_NB][PIECE_NB];
+#ifdef HORDE
+extern Value HordeValue[PHASE_NB][PIECE_NB];
+#endif
 
 inline Color operator~(Color c) {
   return Color(c ^ BLACK);
