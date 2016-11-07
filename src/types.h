@@ -175,13 +175,8 @@ static std::vector<std::string> variants = {"chess"
 /// NOTE: EN-PASSANT bit is set only when a pawn can be captured
 ///
 /// Special cases are MOVE_NONE and MOVE_NULL. We can sneak these in because in
-/// any normal move destination square is always different from origin square
-/// while MOVE_NONE and MOVE_NULL have the same origin and destination square.
-
-enum Move : int {
-  MOVE_NONE,
-  MOVE_NULL = 65
-};
+/// any ENPASSANT move destination is not rank 0.
+/// Crazyhouse drops are the only moves with destination = origin.
 
 enum MoveType {
   NORMAL,
@@ -189,8 +184,15 @@ enum MoveType {
   ENPASSANT = 2 << 14,
   CASTLING  = 3 << 14
 #ifdef CRAZYHOUSE
-  ,DROP = 1 << 17
+  /// NOTE: unlike the other move types, this is not directly encoded into move.
+  ,DROP = ENPASSANT | 5
 #endif
+};
+
+enum Move : int {
+  // Must keep in sync with is_ok()
+  MOVE_NONE = ENPASSANT | 1,
+  MOVE_NULL = ENPASSANT | 3
 };
 
 enum Color {
@@ -524,22 +526,28 @@ inline Square pawn_push(Color c) {
   return c == WHITE ? NORTH : SOUTH;
 }
 
-inline Square from_sq(Move m) {
-#ifdef CRAZYHOUSE
-  if (m & DROP)
-      return SQ_NONE;
-#endif
-  return Square((m >> 6) & 0x3F);
-}
-
 inline Square to_sq(Move m) {
   return Square(m & 0x3F);
 }
 
+inline Square from_sq(Move m) {
+  Square real_origin = Square((m >> 6) & 0x3F);
+#ifdef CRAZYHOUSE
+  if (to_sq(m) == real_origin)
+      return SQ_NONE;
+#endif
+  return real_origin;
+}
+
+#ifdef CRAZYHOUSE
+inline bool is_drop(Move m) {
+  return from_sq(m) == SQ_NONE;
+}
+#endif
+
 inline MoveType type_of(Move m) {
 #ifdef CRAZYHOUSE
-  if (m & DROP)
-      return DROP;
+  if (is_drop(m)) return DROP;
 #endif
   return MoveType(m & (3 << 14));
 }
@@ -566,17 +574,22 @@ inline Move make(Square from, Square to, PieceType pt = KNIGHT) {
 }
 
 #ifdef CRAZYHOUSE
-inline Move make_drop(Square to, Piece pc) {
-  return Move(DROP + (pc << 18) + to);
+inline Move make_drop(Square to, PieceType pt) {
+  if (pt == PAWN)
+    return Move((to << 6) + to);
+  return Move(PROMOTION + ((pt - KNIGHT) << 12) + (to << 6) + to);
 }
 
-inline Piece dropped_piece(Move m) {
-  return Piece((m >> 18) & 15);
+inline PieceType dropped_piece(Move m) {
+  if (MoveType(m & (3 << 14)) == PROMOTION)
+    return promotion_type(m);
+  return PAWN;
 }
 #endif
 
 inline bool is_ok(Move m) {
-  return from_sq(m) != to_sq(m); // Catch MOVE_NULL and MOVE_NONE
+  // Catch MOVE_NULL and MOVE_NONE
+  return type_of(m) != ENPASSANT || (m & 1) == 0;
 }
 
 #endif // #ifndef TYPES_H_INCLUDED

@@ -133,7 +133,7 @@ namespace {
         if (Checks)
             b &= pos.check_squares(Pt);
         while (b)
-            *moveList++ = make_drop(pop_lsb(&b), make_piece(Us, Pt));
+            *moveList++ = make_drop(pop_lsb(&b), Pt);
     }
 
     return moveList;
