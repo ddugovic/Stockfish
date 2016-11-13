@@ -252,7 +252,18 @@ Position& Position::set(const string& fenStr, bool isChess960, Variant v, StateI
   std::memset(si, 0, sizeof(StateInfo));
   std::fill_n(&pieceList[0][0], sizeof(pieceList) / sizeof(Square), SQ_NONE);
   st = si;
-  var = v;
+  subvar = v;
+  if (v < VARIANT_NB)
+      var = v;
+  else
+      switch(v)
+      {
+      case SUICIDE_VARIANT:
+          var = ANTI_VARIANT;
+          break;
+      default:
+          assert(false);
+      }
 
   ss >> std::noskipws;
 

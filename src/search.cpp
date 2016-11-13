@@ -1315,7 +1315,9 @@ moves_loop: // When in check search starts from here
 #endif
 #ifdef ANTI
         if (pos.is_anti())
-            bestValue = excludedMove ? alpha : mate_in(ss->ply+1);
+            bestValue = excludedMove ? alpha
+            : pos.is_suicide() ? pos.suicide_stalemate(ss->ply, DrawValue[pos.side_to_move()])
+            : mate_in(ss->ply+1);
         else
 #endif
         bestValue = excludedMove ? alpha

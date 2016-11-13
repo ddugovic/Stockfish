@@ -164,6 +164,7 @@ public:
   int game_ply() const;
   bool is_chess960() const;
   Variant variant() const;
+  Variant subvariant() const;
 #ifdef ATOMIC
   bool is_atomic() const;
   bool is_atomic_win() const;
@@ -207,6 +208,8 @@ public:
 #endif
 #ifdef ANTI
   bool is_anti() const;
+  bool is_suicide() const;
+  Value suicide_stalemate(int ply, Value draw) const;
   bool is_anti_win() const;
   bool is_anti_loss() const;
   bool can_capture() const;
@@ -263,6 +266,7 @@ private:
   StateInfo* st;
   bool chess960;
   Variant var;
+  Variant subvar;
 
 };
 
@@ -518,6 +522,19 @@ inline bool Position::is_anti() const {
   return var == ANTI_VARIANT;
 }
 
+inline bool Position::is_suicide() const {
+  return subvar == SUICIDE_VARIANT;
+}
+
+inline Value Position::suicide_stalemate(int ply, Value draw) const {
+  int balance = popcount(pieces(sideToMove)) - popcount(pieces(~sideToMove));
+  if (balance > 0)
+      return mated_in(ply);
+  if (balance < 0)
+      return mate_in(ply + 1);
+  return draw;
+}
+
 inline bool Position::is_anti_loss() const {
   return count<ALL_PIECES>(~sideToMove) == 0;
 }
@@ -625,6 +642,10 @@ inline bool Position::is_chess960() const {
 
 inline Variant Position::variant() const {
   return var;
+}
+
+inline Variant Position::subvariant() const {
+  return subvar;
 }
 
 inline bool Position::capture_or_promotion(Move m) const {
