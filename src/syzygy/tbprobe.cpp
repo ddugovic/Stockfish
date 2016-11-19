@@ -83,6 +83,9 @@ const char* WdlSuffixes[SUBVARIANT_NB] = {
 #ifdef ANTI //suicide
     ".stbw",
 #endif
+#ifdef CRAZYHOUSE //loop
+    nullptr,
+#endif
 };
 
 const char* DtzSuffixes[SUBVARIANT_NB] = {
@@ -113,6 +116,9 @@ const char* DtzSuffixes[SUBVARIANT_NB] = {
 #endif
 #ifdef ANTI //suicide
     ".stbz",
+#endif
+#ifdef CRAZYHOUSE //loop
+    nullptr,
 #endif
 };
 
@@ -1296,6 +1302,12 @@ void* init(Entry& e, const Position& pos) {
         {
             { 0xE4, 0xCF, 0xE7, 0x23 },
             { 0x7B, 0xF6, 0x93, 0x15 }
+        },
+#endif
+#ifdef CRAZYHOUSE //loop
+        {
+            { 0xD7, 0x66, 0x0C, 0xA5 },
+            { 0x71, 0xE8, 0x23, 0x5D }
         },
 #endif
     };
