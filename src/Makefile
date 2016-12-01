@@ -21,6 +21,9 @@
 ### Section 1. General Configuration
 ### ==========================================================================
 
+default:
+	make -j profile-build ARCH=x86-64-modern COMP=clang COMPCXX=clang++
+
 ### Establish the operating system name
 KERNEL = $(shell uname -s)
 ifeq ($(KERNEL),Linux)
@@ -252,7 +255,8 @@ ifneq ($(comp),mingw)
 endif
 
 ### 3.2.1 Debugging
-CXXFLAGS += -DANTI -DATOMIC -DCRAZYHOUSE -DHORDE -DKOTH -DRACE -DRELAY -DTHREECHECK
+###CXXFLAGS += -DANTI -DATOMIC -DCRAZYHOUSE -DHORDE -DKOTH -DRACE -DRELAY -DTHREECHECK
+CXXFLAGS += -DCRAZYHOUSE
 ifeq ($(debug),no)
 	CXXFLAGS += -DNDEBUG
 else
@@ -463,8 +467,7 @@ profileclean:
 	@rm -f bench.txt *.gcda ./syzygy/*.gcda *.gcno ./syzygy/*.gcno
 	@rm -f stockfish.profdata *.profraw
 
-default:
-	help
+
 
 ### ==========================================================================
 ### Section 5. Private targets
