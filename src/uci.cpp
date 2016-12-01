@@ -37,8 +37,34 @@ extern void benchmark(const Position& pos, istream& is);
 
 namespace {
 
-  // FEN string of the initial position, normal chess
-  const char* StartFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+  // FEN strings of the initial positions
+  const string StartFENs[VARIANT_NB] = {
+  "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+#ifdef ANTI
+  ,"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+#endif
+#ifdef ATOMIC
+  ,"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+#endif
+#ifdef CRAZYHOUSE
+  ,"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1"
+#endif
+#ifdef HORDE
+  ,"rnbqkbnr/pppppppp/8/1PP2PP1/PPPPPPPP/PPPPPPPP/PPPPPPPP/PPPPPPPP w kq - 0 1"
+#endif
+#ifdef KOTH
+  ,"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+#endif
+#ifdef RACE
+  ,"8/8/8/8/8/8/krbnNBRK/qrbnNBRQ w - - 0 1"
+#endif
+#ifdef RELAY
+  ,"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+#endif
+#ifdef THREECHECK
+  ,"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 3+3 0 1"
+#endif
+  };
 
   // A list to keep track of the position states along the setup moves (from the
   // start position to the position just before the search starts). Needed by
@@ -56,11 +82,12 @@ namespace {
     Move m;
     string token, fen;
 
-    is >> token;
+    Variant variant = UCI::variant_from_name(Options["UCI_Variant"]);
 
+    is >> token;
     if (token == "startpos")
     {
-        fen = StartFEN;
+        fen = StartFENs[variant];
         is >> token; // Consume "moves" token if any
     }
     else if (token == "fen")
@@ -70,7 +97,7 @@ namespace {
         return;
 
     States = StateListPtr(new std::deque<StateInfo>(1));
-    pos.set(fen, Options["UCI_Chess960"], &States->back(), Threads.main());
+    pos.set(fen, Options["UCI_Chess960"], variant, &States->back(), Threads.main());
 
     // Parse move list (if any)
     while (is >> token && (m = UCI::to_move(pos, token)) != MOVE_NONE)
@@ -87,7 +114,6 @@ namespace {
   void setoption(istringstream& is) {
 
     string token, name, value;
-
     is >> token; // Consume "name" token
 
     // Read option name (can contain spaces)
@@ -99,7 +125,14 @@ namespace {
         value += string(" ", value.empty() ? 0 : 1) + token;
 
     if (Options.count(name))
+    {
         Options[name] = value;
+        if (name == "UCI_Variant") {
+            Variant variant = UCI::variant_from_name(value);
+            sync_cout << "info string variant " << (string)Options["UCI_Variant"] << " startpos " << StartFENs[variant] << sync_endl;
+            Tablebases::init(Options["SyzygyPath"], variant);
+        }
+    }
     else
         sync_cout << "No such option: " << name << sync_endl;
   }
@@ -150,7 +183,7 @@ void UCI::loop(int argc, char* argv[]) {
   Position pos;
   string token, cmd;
 
-  pos.set(StartFEN, false, &States->back(), Threads.main());
+  pos.set(StartFENs[CHESS_VARIANT], false, CHESS_VARIANT, &States->back(), Threads.main());
 
   for (int i = 1; i < argc; ++i)
       cmd += std::string(argv[i]) + " ";
@@ -187,7 +220,7 @@ void UCI::loop(int argc, char* argv[]) {
       else if (token == "ucinewgame")
       {
           Search::clear();
-          Tablebases::init(Options["SyzygyPath"]);
+          Tablebases::init(Options["SyzygyPath"], UCI::variant_from_name(Options["UCI_Variant"]));
           Time.availableNodes = 0;
       }
       else if (token == "isready")    sync_cout << "readyok" << sync_endl;
@@ -266,7 +299,11 @@ string UCI::move(Move m, bool chess960) {
   if (type_of(m) == CASTLING && !chess960)
       to = make_square(to > from ? FILE_G : FILE_C, rank_of(from));
 
+#ifdef CRAZYHOUSE
+  string move = ((type_of(m) == DROP) ? std::string{" PNBRQK  PNBRQK "[dropped_piece(m)], '@'} : UCI::square(from)) + UCI::square(to);
+#else
   string move = UCI::square(from) + UCI::square(to);
+#endif
 
   if (type_of(m) == PROMOTION)
       move += " pnbrqk"[promotion_type(m)];
@@ -288,4 +325,14 @@ Move UCI::to_move(const Position& pos, string& str) {
           return m;
 
   return MOVE_NONE;
+}
+
+
+Variant UCI::variant_from_name(const string& str) {
+
+  for (Variant v = CHESS_VARIANT; v < VARIANT_NB; ++v)
+      if (variants[v] == str)
+          return v;
+
+  return CHESS_VARIANT;
 }

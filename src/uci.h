@@ -23,6 +23,7 @@
 
 #include <map>
 #include <string>
+#include <vector>
 
 #include "types.h"
 
@@ -49,18 +50,21 @@ public:
   Option(OnChange = nullptr);
   Option(bool v, OnChange = nullptr);
   Option(const char* v, OnChange = nullptr);
+  Option(const char* v, const std::vector<std::string>& variants, OnChange = nullptr);
   Option(int v, int minv, int maxv, OnChange = nullptr);
 
   Option& operator=(const std::string&);
   void operator<<(const Option&);
   operator int() const;
   operator std::string() const;
+  int compare(const char*) const;
 
 private:
   friend std::ostream& operator<<(std::ostream&, const OptionsMap&);
 
   std::string defaultValue, currentValue, type;
   int min, max;
+  std::vector<std::string> comboValues;
   size_t idx;
   OnChange on_change;
 };
@@ -72,6 +76,7 @@ std::string square(Square s);
 std::string move(Move m, bool chess960);
 std::string pv(const Position& pos, Depth depth, Value alpha, Value beta);
 Move to_move(const Position& pos, std::string& str);
+Variant variant_from_name(const std::string& str);
 
 } // namespace UCI
 

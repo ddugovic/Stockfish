@@ -155,8 +155,41 @@ void benchmark(const Position& current, istream& is) {
 
   for (size_t i = 0; i < fens.size(); ++i)
   {
+      Variant variant = CHESS_VARIANT;
+#ifdef ATOMIC
+    if (!(Options["UCI_Variant"].compare("atomic")))
+        variant = ATOMIC_VARIANT;
+#endif
+#ifdef CRAZYHOUSE
+    if (!(Options["UCI_Variant"].compare("crazyhouse")))
+        variant = CRAZYHOUSE_VARIANT;
+#endif
+#ifdef ANTI
+    if (!(Options["UCI_Variant"].compare("giveaway")))
+        variant = ANTI_VARIANT;
+#endif
+#ifdef HORDE
+    if (!(Options["UCI_Variant"].compare("horde")))
+        variant = HORDE_VARIANT;
+#endif
+#ifdef KOTH
+    if (!(Options["UCI_Variant"].compare("kingofthehill")))
+        variant = KOTH_VARIANT;
+#endif
+#ifdef RACE
+    if (!(Options["UCI_Variant"].compare("racingkings")))
+        variant = RACE_VARIANT;
+#endif
+#ifdef RELAY
+    if (!(Options["UCI_Variant"].compare("relay")))
+        variant = RELAY_VARIANT;
+#endif
+#ifdef THREECHECK
+    if (!(Options["UCI_Variant"].compare("threecheck")))
+        variant = THREECHECK_VARIANT;
+#endif
       StateListPtr states(new std::deque<StateInfo>(1));
-      pos.set(fens[i], Options["UCI_Chess960"], &states->back(), Threads.main());
+      pos.set(fens[i], Options["UCI_Chess960"], variant, &states->back(), Threads.main());
 
       cerr << "\nPosition: " << i + 1 << '/' << fens.size() << endl;
 
