@@ -53,15 +53,22 @@ bool CaseInsensitiveLess::operator() (const string& s1, const string& s2) const 
 
 /// init() initializes the UCI options to their hard-coded default values
 
-void init(OptionsMap& o) {
-
+	void init(OptionsMap& o) {
+		
   const int MaxHashMB = Is64Bit ? 1024 * 1024 : 2048;
-
+		
   o["Debug Log File"]        << Option("", on_logger);
   o["Contempt"]              << Option(0, -100, 100);
   o["Threads"]               << Option(1, 1, 128, on_threads);
   o["Hash"]                  << Option(16, 1, MaxHashMB, on_hash_size);
   o["Clear Hash"]            << Option(on_clear_hash);
+  o["Study"]                 << Option(false);
+  o["Ladder"]                << Option(false);
+  o["Ladder Delay"]          << Option(false);
+  o["Ladder Rating"]         << Option(1200, 1200, 2800);
+  o["Ladder Range"]          << Option(false);
+  o["Ladder Lower"]          << Option(1200, 1200, 2799);
+  o["Ladder Upper"]          << Option(1201, 1201, 2800);
   o["Ponder"]                << Option(false);
   o["MultiPV"]               << Option(1, 1, 500);
   o["Skill Level"]           << Option(20, 0, 20);
@@ -75,7 +82,7 @@ void init(OptionsMap& o) {
   o["SyzygyProbeDepth"]      << Option(1, 1, 100);
   o["Syzygy50MoveRule"]      << Option(true);
   o["SyzygyProbeLimit"]      << Option(6, 0, 6);
-}
+	}
 
 
 /// operator<<() is used to print all the options default values in chronological

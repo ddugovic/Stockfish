@@ -312,6 +312,27 @@ void MainThread::search() {
   int contempt = Options["Contempt"] * PawnValueEg / 100; // From centipawns
   DrawValue[ us] = VALUE_DRAW - Value(contempt);
   DrawValue[~us] = VALUE_DRAW + Value(contempt);
+	
+	if (Options["Ladder"])
+	{
+		{
+			int NodesToSearch   = pow(1.0069555500567,(((Options["Ladder Rating"])/1200 - 1)
+													   + (Options["Ladder Rating"]) - 1200)) * 64 ;
+			Limits.nodes = NodesToSearch;
+		}
+		
+		if (Options["Ladder Range"])
+		{
+			int use_rating = rand() %  (Options["Ladder Upper"] - Options["Ladder Lower"] + 1)
+			+ Options["Ladder Lower"];
+			int NodesToSearch_2   = pow(1.0069555500567,(((use_rating /1200) - 1)
+														 + use_rating - 1200)) * 64 ;
+			Limits.nodes = NodesToSearch_2;
+			
+		}
+		if (Options["Ladder Delay"])
+			std::this_thread::sleep_for (std::chrono::seconds(Time.optimum()/1000));
+	}
 
   if (rootMoves.empty())
   {
