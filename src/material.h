@@ -53,6 +53,9 @@ struct Entry {
 #ifdef KOTH
     if (pos.is_koth()) return SCALE_FACTOR_NORMAL;
 #endif
+#ifdef RACE
+    if (pos.is_race()) return SCALE_FACTOR_NORMAL;
+#endif
 #ifdef THREECHECK
     if (pos.is_three_check()) return SCALE_FACTOR_NORMAL;
 #endif
@@ -62,9 +65,15 @@ struct Entry {
 #ifdef ATOMIC
     if (pos.is_atomic()) return SCALE_FACTOR_NORMAL;
 #endif
-    return   !scalingFunction[c]
-          || (*scalingFunction[c])(pos) == SCALE_FACTOR_NONE ? ScaleFactor(factor[c])
-                                                             : (*scalingFunction[c])(pos);
+#ifdef ANTI
+    if (pos.is_anti()) return SCALE_FACTOR_NORMAL;
+#endif
+#ifdef CRAZYHOUSE
+    if (pos.is_house()) return SCALE_FACTOR_NORMAL;
+#endif
+    ScaleFactor sf = scalingFunction[c] ? (*scalingFunction[c])(pos)
+                                        :  SCALE_FACTOR_NONE;
+    return sf != SCALE_FACTOR_NONE ? sf : ScaleFactor(factor[c]);
   }
 
   Key key;

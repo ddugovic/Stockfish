@@ -29,6 +29,7 @@
 #include "thread.h"
 #include "timeman.h"
 #include "uci.h"
+#include "syzygy/tbprobe.h"
 
 using namespace std;
 
@@ -36,17 +37,39 @@ extern void benchmark(const Position& pos, istream& is);
 
 namespace {
 
-  // FEN string of the initial position, normal variant
-  const char* StartFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-#ifdef HORDE
-  // FEN string of the initial position, horde variant
-  const char* StartFENHorde = "rnbqkbnr/pppppppp/8/1PP2PP1/PPPPPPPP/PPPPPPPP/PPPPPPPP/PPPPPPPP w kq - 0 1";
+  // FEN strings of the initial positions
+  const string StartFENs[VARIANT_NB] = {
+  "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+#ifdef ANTI
+  ,"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 #endif
+#ifdef ATOMIC
+  ,"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+#endif
+#ifdef CRAZYHOUSE
+  ,"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1"
+#endif
+#ifdef HORDE
+  ,"rnbqkbnr/pppppppp/8/1PP2PP1/PPPPPPPP/PPPPPPPP/PPPPPPPP/PPPPPPPP w kq - 0 1"
+#endif
+#ifdef KOTH
+  ,"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+#endif
+#ifdef RACE
+  ,"8/8/8/8/8/8/krbnNBRK/qrbnNBRQ w - - 0 1"
+#endif
+#ifdef RELAY
+  ,"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+#endif
+#ifdef THREECHECK
+  ,"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 3+3 0 1"
+#endif
+  };
 
-  // Stack to keep track of the position states along the setup moves (from the
+  // A list to keep track of the position states along the setup moves (from the
   // start position to the position just before the search starts). Needed by
   // 'draw by repetition' detection.
-  Search::StateStackPtr SetupStates;
+  StateListPtr States(new std::deque<StateInfo>(1));
 
 
   // position() is called when engine receives the "position" UCI command.
@@ -59,34 +82,12 @@ namespace {
     Move m;
     string token, fen;
 
-    int variant = STANDARD_VARIANT;
-    if (Options["UCI_Chess960"])
-        variant |= CHESS960_VARIANT;
-#ifdef ATOMIC
-    if (Options["UCI_Atomic"])
-        variant |= ATOMIC_VARIANT;
-#endif
-#ifdef HORDE
-    if (Options["UCI_Horde"])
-        variant |= HORDE_VARIANT;
-#endif
-#ifdef KOTH
-    if (Options["UCI_KingOfTheHill"])
-        variant |= KOTH_VARIANT;
-#endif
-#ifdef THREECHECK
-    if (Options["UCI_3Check"])
-        variant |= THREECHECK_VARIANT;
-#endif
+    Variant variant = UCI::variant_from_name(Options["UCI_Variant"]);
 
     is >> token;
     if (token == "startpos")
     {
-#ifdef HORDE
-        fen = (variant & HORDE_VARIANT) ? StartFENHorde : StartFEN;
-#else
-        fen = StartFEN;
-#endif
+        fen = StartFENs[variant];
         is >> token; // Consume "moves" token if any
     }
     else if (token == "fen")
@@ -94,15 +95,15 @@ namespace {
             fen += token + " ";
     else
         return;
-    pos.set(fen, variant, Threads.main());
-    
-    SetupStates = Search::StateStackPtr(new std::stack<StateInfo>);
+
+    States = StateListPtr(new std::deque<StateInfo>(1));
+    pos.set(fen, Options["UCI_Chess960"], variant, &States->back(), Threads.main());
 
     // Parse move list (if any)
     while (is >> token && (m = UCI::to_move(pos, token)) != MOVE_NONE)
     {
-        SetupStates->push(StateInfo());
-        pos.do_move(m, SetupStates->top(), pos.gives_check(m, CheckInfo(pos)));
+        States->push_back(StateInfo());
+        pos.do_move(m, States->back());
     }
   }
 
@@ -124,7 +125,14 @@ namespace {
         value += string(" ", value.empty() ? 0 : 1) + token;
 
     if (Options.count(name))
+    {
         Options[name] = value;
+        if (name == "UCI_Variant") {
+            Variant variant = UCI::variant_from_name(value);
+            sync_cout << "info string variant " << (string)Options["UCI_Variant"] << " startpos " << StartFENs[variant] << sync_endl;
+            Tablebases::init(Options["SyzygyPath"], variant);
+        }
+    }
     else
         sync_cout << "No such option: " << name << sync_endl;
   }
@@ -134,7 +142,7 @@ namespace {
   // the thinking time and other parameters from the input string, then starts
   // the search.
 
-  void go(const Position& pos, istringstream& is) {
+  void go(Position& pos, istringstream& is) {
 
     Search::LimitsType limits;
     string token;
@@ -158,7 +166,7 @@ namespace {
         else if (token == "infinite")  limits.infinite = 1;
         else if (token == "ponder")    limits.ponder = 1;
 
-    Threads.start_thinking(pos, limits, SetupStates);
+    Threads.start_thinking(pos, States, limits);
   }
 
 } // namespace
@@ -172,8 +180,10 @@ namespace {
 
 void UCI::loop(int argc, char* argv[]) {
 
-  Position pos(StartFEN, Threads.main()); // The root position
+  Position pos;
   string token, cmd;
+
+  pos.set(StartFENs[CHESS_VARIANT], false, CHESS_VARIANT, &States->back(), Threads.main());
 
   for (int i = 1; i < argc; ++i)
       cmd += std::string(argv[i]) + " ";
@@ -210,6 +220,7 @@ void UCI::loop(int argc, char* argv[]) {
       else if (token == "ucinewgame")
       {
           Search::clear();
+          Tablebases::init(Options["SyzygyPath"], UCI::variant_from_name(Options["UCI_Variant"]));
           Time.availableNodes = 0;
       }
       else if (token == "isready")    sync_cout << "readyok" << sync_endl;
@@ -288,7 +299,11 @@ string UCI::move(Move m, bool chess960) {
   if (type_of(m) == CASTLING && !chess960)
       to = make_square(to > from ? FILE_G : FILE_C, rank_of(from));
 
+#ifdef CRAZYHOUSE
+  string move = ((type_of(m) == DROP) ? std::string{" PNBRQK  PNBRQK "[dropped_piece(m)], '@'} : UCI::square(from)) + UCI::square(to);
+#else
   string move = UCI::square(from) + UCI::square(to);
+#endif
 
   if (type_of(m) == PROMOTION)
       move += " pnbrqk"[promotion_type(m)];
@@ -310,4 +325,14 @@ Move UCI::to_move(const Position& pos, string& str) {
           return m;
 
   return MOVE_NONE;
+}
+
+
+Variant UCI::variant_from_name(const string& str) {
+
+  for (Variant v = CHESS_VARIANT; v < VARIANT_NB; ++v)
+      if (variants[v] == str)
+          return v;
+
+  return CHESS_VARIANT;
 }

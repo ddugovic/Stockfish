@@ -22,42 +22,12 @@
 #define POSITION_H_INCLUDED
 
 #include <cassert>
-#include <cstddef>  // For offsetof()
+#include <deque>
+#include <memory> // For std::unique_ptr
 #include <string>
 
 #include "bitboard.h"
 #include "types.h"
-
-#define STANDARD_VARIANT 0
-#define CHESS960_VARIANT 1 << 1
-#define KOTH_VARIANT 1 << 2
-#define THREECHECK_VARIANT 1 << 3
-#define HORDE_VARIANT 1 << 4
-#define ATOMIC_VARIANT 1 << 5
-
-class Position;
-class Thread;
-
-namespace PSQT {
-
-  extern Score psq[COLOR_NB][PIECE_TYPE_NB][SQUARE_NB];
-
-  void init();
-}
-
-/// CheckInfo struct is initialized at constructor time and keeps info used to
-/// detect if a move gives check.
-
-struct CheckInfo {
-
-  explicit CheckInfo(const Position&);
-
-  Bitboard dcCandidates;
-  Bitboard pinned;
-  Bitboard checkSquares[PIECE_TYPE_NB];
-  Square   ksq;
-};
-
 
 /// StateInfo struct stores information needed to restore a Position object to
 /// its previous state when we retract a move. Whenever a move is made on the
@@ -73,44 +43,52 @@ struct StateInfo {
   int    rule50;
   int    pliesFromNull;
 #ifdef THREECHECK
-  Checks checksGiven[COLOR_NB];
+  CheckCount checksGiven[COLOR_NB];
 #endif
   Score  psq;
   Square epSquare;
 
-  // Not copied when making a move
+  // Not copied when making a move (will be recomputed anyhow)
   Key        key;
   Bitboard   checkersBB;
-  PieceType  capturedType;
+  Piece      capturedPiece;
 #ifdef ATOMIC
   Piece      blast[SQUARE_NB];
 #endif
+#ifdef CRAZYHOUSE
+  bool       capturedpromoted;
+#endif
   StateInfo* previous;
+  Bitboard   blockersForKing[COLOR_NB];
+  Bitboard   pinnersForKing[COLOR_NB];
+#ifdef RELAY
+  Square     pieceListRelay[PIECE_NB][16];
+  Bitboard   byTypeBBRelay[PIECE_TYPE_NB];
+#endif
+  Bitboard   checkSquares[PIECE_TYPE_NB];
 };
+
+// In a std::deque references to elements are unaffected upon resizing
+typedef std::unique_ptr<std::deque<StateInfo>> StateListPtr;
 
 
 /// Position class stores information regarding the board representation as
 /// pieces, side to move, hash keys, castling info, etc. Important methods are
 /// do_move() and undo_move(), used by the search to update node info when
 /// traversing the search tree.
+class Thread;
 
 class Position {
-
 public:
   static void init();
 
-  Position() = default; // To define the global object RootPos
+  Position() = default;
   Position(const Position&) = delete;
-  Position(const Position& pos, Thread* th) { *this = pos; thisThread = th; }
-
-  Position(const std::string& f, Thread* t) { set(f, STANDARD_VARIANT, t); }
-  Position(const std::string& f, int var, Thread* t) { set(f, var, t); }
-
-  Position& operator=(const Position&); // To assign RootPos from UCI
+  Position& operator=(const Position&) = delete;
 
   // FEN string input/output
-  void set(const std::string& fenStr, int var, Thread* th);
-
+  Position& set(const std::string& fenStr, bool isChess960, Variant v, StateInfo* si, Thread* th);
+  Position& set(const std::string& code, Color c, StateInfo* si);
   const std::string fen() const;
 
   // Position representation
@@ -131,12 +109,16 @@ public:
   int can_castle(Color c) const;
   int can_castle(CastlingRight cr) const;
   bool castling_impeded(CastlingRight cr) const;
+#ifdef ANTI
+  Square castling_king_square(CastlingRight cr) const;
+#endif
   Square castling_rook_square(CastlingRight cr) const;
 
   // Checking
   Bitboard checkers() const;
   Bitboard discovered_check_candidates() const;
   Bitboard pinned_pieces(Color c) const;
+  Bitboard check_squares(PieceType pt) const;
 
   // Attacks to/from a given square
   Bitboard attackers_to(Square s) const;
@@ -144,35 +126,35 @@ public:
   Bitboard attacks_from(Piece pc, Square s) const;
   template<PieceType> Bitboard attacks_from(Square s) const;
   template<PieceType> Bitboard attacks_from(Square s, Color c) const;
+  Bitboard slider_blockers(Bitboard sliders, Square s, Bitboard& pinners) const;
 
   // Properties of moves
-  bool legal(Move m, Bitboard pinned) const;
+  bool legal(Move m) const;
   bool pseudo_legal(const Move m) const;
   bool capture(Move m) const;
   bool capture_or_promotion(Move m) const;
-  bool gives_check(Move m, const CheckInfo& ci) const;
+  bool gives_check(Move m) const;
   bool advanced_pawn_push(Move m) const;
   Piece moved_piece(Move m) const;
-  PieceType captured_piece_type() const;
+  Piece captured_piece() const;
 
   // Piece specific
   bool pawn_passed(Color c, Square s) const;
   bool opposite_bishops() const;
 
   // Doing and undoing moves
-  void do_move(Move m, StateInfo& st, bool givesCheck);
+  void do_move(Move m, StateInfo& newSt);
+  void do_move(Move m, StateInfo& newSt, bool givesCheck);
   void undo_move(Move m);
-  void do_null_move(StateInfo& st);
+  void do_null_move(StateInfo& newSt);
   void undo_null_move();
 
-  // Static exchange evaluation
-  Value see(Move m) const;
-  Value see_sign(Move m) const;
+  // Static Exchange Evaluation
+  bool see_ge(Move m, Value value) const;
 
   // Accessing hash keys
   Key key() const;
   Key key_after(Move m) const;
-  Key exclusion_key() const;
   Key material_key() const;
   Key pawn_key() const;
 
@@ -181,6 +163,7 @@ public:
   Phase game_phase() const;
   int game_ply() const;
   bool is_chess960() const;
+  Variant variant() const;
 #ifdef ATOMIC
   bool is_atomic() const;
   bool is_atomic_win() const;
@@ -188,7 +171,17 @@ public:
 #endif
 #ifdef HORDE
   bool is_horde() const;
+  bool is_horde_color(Color c) const;
   bool is_horde_loss() const;
+#endif
+#ifdef CRAZYHOUSE
+  bool is_house() const;
+  int count_in_hand(Color c, PieceType pt) const;
+  void add_to_hand(Color c, PieceType pt);
+  void remove_from_hand(Color c, PieceType pt);
+  bool is_promoted(Square s) const;
+  void drop_piece(Piece pc, Square s);
+  void undrop_piece(Piece pc, Square s);
 #endif
 #ifdef KOTH
   bool is_koth() const;
@@ -196,17 +189,30 @@ public:
   bool is_koth_loss() const;
   int koth_distance(Color c) const;
 #endif
+#ifdef RACE
+  bool is_race() const;
+  bool is_race_win() const;
+  bool is_race_draw() const;
+  bool is_race_loss() const;
+#endif
+#ifdef RELAY
+  bool is_relay() const;
+#endif
 #ifdef THREECHECK
   bool is_three_check() const;
   bool is_three_check_win() const;
   bool is_three_check_loss() const;
   int checks_count() const;
-  Checks checks_given() const;
-  Checks checks_taken() const;
+  CheckCount checks_given(Color c) const;
+#endif
+#ifdef ANTI
+  bool is_anti() const;
+  bool is_anti_win() const;
+  bool is_anti_loss() const;
+  bool can_capture() const;
 #endif
   Thread* this_thread() const;
   uint64_t nodes_searched() const;
-  void set_nodes_searched(uint64_t n);
   bool is_draw() const;
   int rule50_count() const;
   Score psq_score() const;
@@ -218,15 +224,14 @@ public:
 
 private:
   // Initialization helpers (used while setting up a position)
-  void clear();
-  void set_castling_right(Color c, Square rfrom);
+  void set_castling_right(Color c, Square kfrom, Square rfrom);
   void set_state(StateInfo* si) const;
+  void set_check_info(StateInfo* si) const;
 
   // Other helpers
-  Bitboard check_blockers(Color c, Color kingColor) const;
-  void put_piece(Color c, PieceType pt, Square s);
-  void remove_piece(Color c, PieceType pt, Square s);
-  void move_piece(Color c, PieceType pt, Square from, Square to);
+  void put_piece(Piece pc, Square s);
+  void remove_piece(Piece pc, Square s);
+  void move_piece(Piece pc, Square from, Square to);
   template<bool Do>
   void do_castling(Color us, Square from, Square& to, Square& rfrom, Square& rto);
 
@@ -234,23 +239,30 @@ private:
   Piece board[SQUARE_NB];
   Bitboard byTypeBB[PIECE_TYPE_NB];
   Bitboard byColorBB[COLOR_NB];
-  int pieceCount[COLOR_NB][PIECE_TYPE_NB];
+  int pieceCount[PIECE_NB];
 #ifdef HORDE
-  Square pieceList[COLOR_NB][PIECE_TYPE_NB][SQUARE_NB];
+  Square pieceList[PIECE_NB][SQUARE_NB];
 #else
-  Square pieceList[COLOR_NB][PIECE_TYPE_NB][16];
+  Square pieceList[PIECE_NB][16];
+#endif
+#ifdef CRAZYHOUSE
+  int pieceCountInHand[COLOR_NB][PIECE_TYPE_NB];
+  Bitboard promotedPieces;
 #endif
   int index[SQUARE_NB];
   int castlingRightsMask[SQUARE_NB];
+#ifdef ANTI
+  Square castlingKingSquare[CASTLING_RIGHT_NB];
+#endif
   Square castlingRookSquare[CASTLING_RIGHT_NB];
   Bitboard castlingPath[CASTLING_RIGHT_NB];
-  StateInfo startState;
   uint64_t nodes;
   int gamePly;
   Color sideToMove;
   Thread* thisThread;
   StateInfo* st;
-  int variant;
+  bool chess960;
+  Variant var;
 
 };
 
@@ -269,6 +281,10 @@ inline Piece Position::piece_on(Square s) const {
 }
 
 inline Piece Position::moved_piece(Move m) const {
+#ifdef CRAZYHOUSE
+  if (type_of(m) == DROP)
+      return dropped_piece(m);
+#endif
   return board[from_sq(m)];
 }
 
@@ -297,32 +313,34 @@ inline Bitboard Position::pieces(Color c, PieceType pt1, PieceType pt2) const {
 }
 
 template<PieceType Pt> inline int Position::count(Color c) const {
-  return pieceCount[c][Pt];
+  return pieceCount[make_piece(c, Pt)];
 }
 
 template<PieceType Pt> inline const Square* Position::squares(Color c) const {
-  return pieceList[c][Pt];
+  return pieceList[make_piece(c, Pt)];
 }
 
 template<PieceType Pt> inline Square Position::square(Color c) const {
 #ifdef HORDE
-  if (is_horde() && c == WHITE)
-  {
-      assert(pieceCount[c][Pt] == 0);
+  if (is_horde() && pieceCount[make_piece(c, Pt)] == 0)
       return SQ_NONE;
-  }
 #endif
 #ifdef ATOMIC
-  if (is_atomic() && pieceCount[c][Pt] == 0)
+  if (is_atomic() && pieceCount[make_piece(c, Pt)] == 0)
       return SQ_NONE;
 #endif
-  assert(pieceCount[c][Pt] == 1);
-  return pieceList[c][Pt][0];
+#ifdef ANTI
+  // There may be zero, one, or multiple kings
+  if (is_anti() && Pt == KING)
+      return SQ_NONE;
+#endif
+  assert(pieceCount[make_piece(c, Pt)] == 1);
+  return pieceList[make_piece(c, Pt)][0];
 }
 
 #ifdef THREECHECK
 inline bool Position::is_three_check() const {
-  return variant & THREECHECK_VARIANT;
+  return var == THREECHECK_VARIANT;
 }
 
 inline bool Position::is_three_check_win() const {
@@ -337,12 +355,8 @@ inline int Position::checks_count() const {
   return st->checksGiven[WHITE] + st->checksGiven[BLACK];
 }
 
-inline Checks Position::checks_given() const {
-  return st->checksGiven[sideToMove];
-}
-
-inline Checks Position::checks_taken() const {
-  return st->checksGiven[~sideToMove];
+inline CheckCount Position::checks_given(Color c) const {
+  return st->checksGiven[c];
 }
 #endif
 
@@ -361,6 +375,12 @@ inline int Position::can_castle(Color c) const {
 inline bool Position::castling_impeded(CastlingRight cr) const {
   return byTypeBB[ALL_PIECES] & castlingPath[cr];
 }
+
+#ifdef ANTI
+inline Square Position::castling_king_square(CastlingRight cr) const {
+  return castlingKingSquare[cr];
+}
+#endif
 
 inline Square Position::castling_rook_square(CastlingRight cr) const {
   return castlingRookSquare[cr];
@@ -391,22 +411,35 @@ inline Bitboard Position::checkers() const {
 }
 
 inline Bitboard Position::discovered_check_candidates() const {
-  return check_blockers(sideToMove, ~sideToMove);
+  return st->blockersForKing[~sideToMove] & pieces(sideToMove);
 }
 
 inline Bitboard Position::pinned_pieces(Color c) const {
-  return check_blockers(c, c);
+  return st->blockersForKing[c] & pieces(c);
+}
+
+inline Bitboard Position::check_squares(PieceType pt) const {
+  return st->checkSquares[pt];
 }
 
 inline bool Position::pawn_passed(Color c, Square s) const {
+#ifdef RACE
+  if (is_race())
+    return true;
+#endif
 #ifdef HORDE
-  if (is_horde())
+  if (is_horde() && is_horde_color(c))
       return !(pieces(~c, PAWN) & forward_bb(c, s));
 #endif
   return !(pieces(~c, PAWN) & passed_pawn_mask(c, s));
 }
 
 inline bool Position::advanced_pawn_push(Move m) const {
+#ifdef RACE
+  if (is_race())
+    return   type_of(moved_piece(m)) == KING
+          && rank_of(from_sq(m)) > RANK_4;
+#endif
   return   type_of(moved_piece(m)) == PAWN
         && relative_rank(sideToMove, from_sq(m)) > RANK_4;
 }
@@ -443,19 +476,15 @@ inline uint64_t Position::nodes_searched() const {
   return nodes;
 }
 
-inline void Position::set_nodes_searched(uint64_t n) {
-  nodes = n;
-}
-
 inline bool Position::opposite_bishops() const {
-  return   pieceCount[WHITE][BISHOP] == 1
-        && pieceCount[BLACK][BISHOP] == 1
+  return   pieceCount[W_BISHOP] == 1
+        && pieceCount[B_BISHOP] == 1
         && opposite_colors(square<BISHOP>(WHITE), square<BISHOP>(BLACK));
 }
 
 #ifdef ATOMIC
 inline bool Position::is_atomic() const {
-  return variant & ATOMIC_VARIANT;
+  return var == ATOMIC_VARIANT;
 }
 
 // Loss if king is captured (Atomic)
@@ -471,111 +500,234 @@ inline bool Position::is_atomic_loss() const {
 
 #ifdef HORDE
 inline bool Position::is_horde() const {
-  return variant & HORDE_VARIANT;
+  return var == HORDE_VARIANT;
+}
+
+inline bool Position::is_horde_color(Color c) const {
+  return pieceCount[make_piece(c, KING)] == 0;
 }
 
 // Loss if horde is captured (Horde)
 inline bool Position::is_horde_loss() const {
-  return count<ALL_PIECES>(WHITE) == 0;
+  return count<ALL_PIECES>(is_horde_color(WHITE) ? WHITE : BLACK) == 0;
+}
+#endif
+
+#ifdef ANTI
+inline bool Position::is_anti() const {
+  return var == ANTI_VARIANT;
+}
+
+inline bool Position::is_anti_loss() const {
+  return count<ALL_PIECES>(~sideToMove) == 0;
+}
+
+inline bool Position::is_anti_win() const {
+  return count<ALL_PIECES>(sideToMove) == 0;
+}
+
+inline bool Position::can_capture() const {
+  if (ep_square() != SQ_NONE)
+      if (attackers_to(ep_square()) & pieces(sideToMove, PAWN))
+          return true;
+  Bitboard b = pieces(sideToMove);
+  while (b)
+  {
+      Square s = pop_lsb(&b);
+      if (attacks_from(piece_on(s), s) & pieces(~sideToMove))
+          return true;
+  }
+  return false;
+}
+#endif
+
+#ifdef CRAZYHOUSE
+inline bool Position::is_house() const {
+  return var == CRAZYHOUSE_VARIANT;
+}
+
+inline int Position::count_in_hand(Color c, PieceType pt) const {
+  return pieceCountInHand[c][pt];
+}
+
+inline void Position::add_to_hand(Color c, PieceType pt) {
+  pieceCountInHand[c][pt]++;
+}
+
+inline void Position::remove_from_hand(Color c, PieceType pt) {
+  pieceCountInHand[c][pt]--;
+}
+
+inline bool Position::is_promoted(Square s) const {
+  return promotedPieces & s;
 }
 #endif
 
 #ifdef KOTH
 inline bool Position::is_koth() const {
-  return variant & KOTH_VARIANT;
+  return var == KOTH_VARIANT;
 }
 
 // Win if king is in the center (KOTH)
 inline bool Position::is_koth_win() const {
-  return koth_distance(sideToMove) == 0;
+  Square ksq = square<KING>(sideToMove);
+  return (rank_of(ksq) == RANK_4 || rank_of(ksq) == RANK_5) &&
+         (file_of(ksq) == FILE_D || file_of(ksq) == FILE_E);
 }
 
 // Loss if king is in the center (KOTH)
 inline bool Position::is_koth_loss() const {
-  return koth_distance(~sideToMove) == 0;
+  Square ksq = square<KING>(~sideToMove);
+  return (rank_of(ksq) == RANK_4 || rank_of(ksq) == RANK_5) &&
+         (file_of(ksq) == FILE_D || file_of(ksq) == FILE_E);
 }
 
 inline int Position::koth_distance(Color c) const {
   Square ksq = square<KING>(c);
-  int sdistance =
-	distance(ksq, SQ_D4) +
-	distance(ksq, SQ_E4) +
-	distance(ksq, SQ_D5) +
-	distance(ksq, SQ_E5);
-  // Return 0 if in the center, weighted average distance otherwise
-  return sdistance < 4 ? 0 : (sdistance + 1) / 4;
+  return (distance(ksq, SQ_D4) + distance(ksq, SQ_E4) +
+          distance(ksq, SQ_D5) + distance(ksq, SQ_E5)) / 4;
+}
+#endif
+
+#ifdef RACE
+inline bool Position::is_race() const {
+  return var == RACE_VARIANT;
+}
+
+// Win if king is on the eighth rank (Racing Kings)
+inline bool Position::is_race_win() const {
+  return rank_of(square<KING>(sideToMove)) == RANK_8
+        && rank_of(square<KING>(~sideToMove)) < RANK_8;
+}
+
+// Draw if kings are on the eighth rank (Racing Kings)
+inline bool Position::is_race_draw() const {
+  return rank_of(square<KING>(sideToMove)) == RANK_8
+        && rank_of(square<KING>(~sideToMove)) == RANK_8;
+}
+
+// Loss if king is on the eighth rank (Racing Kings)
+inline bool Position::is_race_loss() const {
+  if (rank_of(square<KING>(~sideToMove)) != RANK_8)
+      return false;
+  if (rank_of(square<KING>(sideToMove)) < (sideToMove == WHITE ? RANK_8 : RANK_7))
+      return true;
+  // Check whether the black king can move to the eighth rank
+  Bitboard b = attacks_from<KING>(square<KING>(sideToMove)) & rank_bb(RANK_8) & ~pieces(sideToMove);
+  while (b)
+      if (!(attackers_to(pop_lsb(&b)) & pieces(~sideToMove)))
+          return false;
+  return true;
+}
+#endif
+
+#ifdef RELAY
+inline bool Position::is_relay() const {
+  return var == RELAY_VARIANT;
 }
 #endif
 
 inline bool Position::is_chess960() const {
-  return variant & CHESS960_VARIANT;
+  return chess960;
+}
+
+inline Variant Position::variant() const {
+  return var;
 }
 
 inline bool Position::capture_or_promotion(Move m) const {
-
   assert(is_ok(m));
+#ifdef RACE
+  if (is_race())
+  {
+    Square from = from_sq(m), to = to_sq(m);
+    return (type_of(board[from]) == KING && rank_of(to) >= rank_of(from)) || !empty(to);
+  }
+#endif
+#ifdef CRAZYHOUSE
+  return type_of(m) != NORMAL ? type_of(m) != DROP && type_of(m) != CASTLING : !empty(to_sq(m));
+#else
   return type_of(m) != NORMAL ? type_of(m) != CASTLING : !empty(to_sq(m));
+#endif
 }
 
 inline bool Position::capture(Move m) const {
-
-  // Castling is encoded as "king captures the rook"
   assert(is_ok(m));
+  // Castling is encoded as "king captures rook"
   return (!empty(to_sq(m)) && type_of(m) != CASTLING) || type_of(m) == ENPASSANT;
 }
 
-inline PieceType Position::captured_piece_type() const {
-  return st->capturedType;
+inline Piece Position::captured_piece() const {
+  return st->capturedPiece;
 }
 
 inline Thread* Position::this_thread() const {
   return thisThread;
 }
 
-inline void Position::put_piece(Color c, PieceType pt, Square s) {
+inline void Position::put_piece(Piece pc, Square s) {
 
-  board[s] = make_piece(c, pt);
+  board[s] = pc;
   byTypeBB[ALL_PIECES] |= s;
-  byTypeBB[pt] |= s;
-  byColorBB[c] |= s;
-  index[s] = pieceCount[c][pt]++;
-  pieceList[c][pt][index[s]] = s;
-  pieceCount[c][ALL_PIECES]++;
+  byTypeBB[type_of(pc)] |= s;
+  byColorBB[color_of(pc)] |= s;
+  index[s] = pieceCount[pc]++;
+  pieceList[pc][index[s]] = s;
+  pieceCount[make_piece(color_of(pc), ALL_PIECES)]++;
 }
 
-inline void Position::remove_piece(Color c, PieceType pt, Square s) {
+inline void Position::remove_piece(Piece pc, Square s) {
 
   // WARNING: This is not a reversible operation. If we remove a piece in
   // do_move() and then replace it in undo_move() we will put it at the end of
   // the list and not in its original place, it means index[] and pieceList[]
-  // are not guaranteed to be invariant to a do_move() + undo_move() sequence.
+  // are not invariant to a do_move() + undo_move() sequence.
   byTypeBB[ALL_PIECES] ^= s;
-  byTypeBB[pt] ^= s;
-  byColorBB[c] ^= s;
+  byTypeBB[type_of(pc)] ^= s;
+  byColorBB[color_of(pc)] ^= s;
 #ifdef ATOMIC
   if (is_atomic())
       board[s] = NO_PIECE;
 #endif
   /* board[s] = NO_PIECE;  Not needed, overwritten by the capturing one */
-  Square lastSquare = pieceList[c][pt][--pieceCount[c][pt]];
+  Square lastSquare = pieceList[pc][--pieceCount[pc]];
   index[lastSquare] = index[s];
-  pieceList[c][pt][index[lastSquare]] = lastSquare;
-  pieceList[c][pt][pieceCount[c][pt]] = SQ_NONE;
-  pieceCount[c][ALL_PIECES]--;
+  pieceList[pc][index[lastSquare]] = lastSquare;
+  pieceList[pc][pieceCount[pc]] = SQ_NONE;
+  pieceCount[make_piece(color_of(pc), ALL_PIECES)]--;
 }
 
-inline void Position::move_piece(Color c, PieceType pt, Square from, Square to) {
+inline void Position::move_piece(Piece pc, Square from, Square to) {
 
   // index[from] is not updated and becomes stale. This works as long as index[]
   // is accessed just by known occupied squares.
   Bitboard from_to_bb = SquareBB[from] ^ SquareBB[to];
   byTypeBB[ALL_PIECES] ^= from_to_bb;
-  byTypeBB[pt] ^= from_to_bb;
-  byColorBB[c] ^= from_to_bb;
+  byTypeBB[type_of(pc)] ^= from_to_bb;
+  byColorBB[color_of(pc)] ^= from_to_bb;
   board[from] = NO_PIECE;
-  board[to] = make_piece(c, pt);
+  board[to] = pc;
   index[to] = index[from];
-  pieceList[c][pt][index[to]] = to;
+  pieceList[pc][index[to]] = to;
+}
+
+#ifdef CRAZYHOUSE
+inline void Position::drop_piece(Piece pc, Square s) {
+  assert(pieceCountInHand[color_of(pc)][type_of(pc)]);
+  put_piece(pc, s);
+  pieceCountInHand[color_of(pc)][type_of(pc)]--;
+}
+
+inline void Position::undrop_piece(Piece pc, Square s) {
+  remove_piece(pc, s);
+  board[s] = NO_PIECE;
+  pieceCountInHand[color_of(pc)][type_of(pc)]++;
+  assert(pieceCountInHand[color_of(pc)][type_of(pc)]);
+}
+#endif
+
+inline void Position::do_move(Move m, StateInfo& newSt) {
+  do_move(m, newSt, gives_check(m));
 }
 
 #endif // #ifndef POSITION_H_INCLUDED

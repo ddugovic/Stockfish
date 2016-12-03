@@ -31,13 +31,10 @@ namespace {
 
   // Polynomial material imbalance parameters
 
-  //                      pair  pawn knight bishop rook queen
-  const int Linear[6] = { 1667, -168, -1027, -166,  238, -138 };
-
   const int QuadraticOurs[][PIECE_TYPE_NB] = {
     //            OUR PIECES
     // pair pawn knight bishop rook queen
-    {   0                               }, // Bishop pair
+    {1667                               }, // Bishop pair
     {  40,    2                         }, // Pawn
     {  32,  255,  -3                    }, // Knight      OUR PIECES
     {   0,  104,   4,    0              }, // Bishop
@@ -54,6 +51,31 @@ namespace {
     {  59,   65,  42,     0             }, // Bishop
     {  46,   39,  24,   -24,    0       }, // Rook
     { 101,  100, -37,   141,  268,    0 }  // Queen
+  };
+
+  const int QuadraticOursAnti[][PIECE_TYPE_NB] = {
+    //            OUR PIECES
+    // pair pawn knight bishop rook queen king
+    {  -62                                    }, // Bishop pair
+    { -179,  59                               }, // Pawn
+    {  -50,  178,  -47                        }, // Knight      OUR PIECES
+    {    0, -130, -187,    0                  }, // Bishop
+    { -155, -317,   60, -218, -288            }, // Rook
+    {   89, -259,  -60, -179,  -32, -76       }, // Queen
+    { -217,  -79,   40,  -23,    9, -63, -197 }  // King
+
+  };
+
+  const int QuadraticTheirsAnti[][PIECE_TYPE_NB] = {
+    //           THEIR PIECES
+    // pair pawn knight bishop rook queen king
+    {    0                                   }, // Bishop pair
+    {  110,    0                             }, // Pawn
+    {    9,   60,    0                       }, // Knight      OUR PIECES
+    {  -53, -143,   33,    0                 }, // Bishop
+    {   73, -298,    3,   41,   0            }, // Rook
+    { -141, -370,   56,   45, -79,   0       }, // Queen
+    {  246,  -40, -194,  178, -39,  74,  0   }  // King
   };
 
   // Endgame evaluation and scaling functions are accessed directly and not through
@@ -88,21 +110,31 @@ namespace {
   /// imbalance() calculates the imbalance by comparing the piece count of each
   /// piece type for both colors.
   template<Color Us>
-  int imbalance(const int pieceCount[][PIECE_TYPE_NB]) {
+  int imbalance(const Position& pos, const int pieceCount[][PIECE_TYPE_NB]) {
 
     const Color Them = (Us == WHITE ? BLACK : WHITE);
 
     int bonus = 0;
 
     // Second-degree polynomial material imbalance by Tord Romstad
+#ifdef ANTI
+    for (int pt1 = NO_PIECE_TYPE; pt1 <= (pos.is_anti() ? KING : QUEEN); ++pt1)
+#else
     for (int pt1 = NO_PIECE_TYPE; pt1 <= QUEEN; ++pt1)
+#endif
     {
         if (!pieceCount[Us][pt1])
             continue;
 
-        int v = Linear[pt1];
+        int v = 0;
 
         for (int pt2 = NO_PIECE_TYPE; pt2 <= pt1; ++pt2)
+#ifdef ANTI
+            if (pos.is_anti())
+                v +=  QuadraticOursAnti[pt1][pt2] * pieceCount[Us][pt2]
+                    + QuadraticTheirsAnti[pt1][pt2] * pieceCount[Them][pt2];
+            else
+#endif
             v +=  QuadraticOurs[pt1][pt2] * pieceCount[Us][pt2]
                 + QuadraticTheirs[pt1][pt2] * pieceCount[Them][pt2];
 
@@ -179,6 +211,9 @@ Entry* probe(const Position& pos) {
 #ifdef KOTH
           if (pos.is_koth()) {} else
 #endif
+#ifdef RACE
+          if (pos.is_race()) {} else
+#endif
 #ifdef THREECHECK
           if (pos.is_three_check()) {} else
 #endif
@@ -187,6 +222,12 @@ Entry* probe(const Position& pos) {
 #endif
 #ifdef ATOMIC
           if (pos.is_atomic()) {} else
+#endif
+#ifdef ANTI
+          if (pos.is_anti()) {} else
+#endif
+#ifdef CRAZYHOUSE
+          if (pos.is_house()) {} else
 #endif
           assert(pos.count<PAWN>(WHITE) >= 2);
 
@@ -197,6 +238,9 @@ Entry* probe(const Position& pos) {
 #ifdef KOTH
           if (pos.is_koth()) {} else
 #endif
+#ifdef RACE
+          if (pos.is_race()) {} else
+#endif
 #ifdef THREECHECK
           if (pos.is_three_check()) {} else
 #endif
@@ -205,6 +249,12 @@ Entry* probe(const Position& pos) {
 #endif
 #ifdef ATOMIC
           if (pos.is_atomic()) {} else
+#endif
+#ifdef ANTI
+          if (pos.is_anti()) {} else
+#endif
+#ifdef CRAZYHOUSE
+          if (pos.is_house()) {} else
 #endif
           assert(pos.count<PAWN>(BLACK) >= 2);
 
@@ -245,7 +295,7 @@ Entry* probe(const Position& pos) {
   { pos.count<BISHOP>(BLACK) > 1, pos.count<PAWN>(BLACK), pos.count<KNIGHT>(BLACK),
     pos.count<BISHOP>(BLACK)    , pos.count<ROOK>(BLACK), pos.count<QUEEN >(BLACK) } };
 
-  e->value = int16_t((imbalance<WHITE>(PieceCount) - imbalance<BLACK>(PieceCount)) / 16);
+  e->value = int16_t((imbalance<WHITE>(pos, PieceCount) - imbalance<BLACK>(pos, PieceCount)) / 16);
   return e;
 }
 
