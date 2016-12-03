@@ -268,7 +268,7 @@ namespace {
     0, 124, 129, 27, 73, 71
   };
 
-  const Score CloseEnemiesHouse = S(10, 20);
+  const Score CloseEnemiesHouse = S(5, 10);
 #endif
 
 #ifdef RACE
@@ -693,6 +693,11 @@ namespace {
     // Penalty when our king is on a pawnless flank
     if (!(pos.pieces(PAWN) & (KingFlank[WHITE][kf] | KingFlank[BLACK][kf])))
         score -= PawnlessFlank;
+
+#ifdef CRAZYHOUSE		
+     if (pos.is_house())		
+         score *= 2;		
+#endif
 
     if (DoTrace)
         Trace::add(KING, Us, score);
