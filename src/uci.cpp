@@ -220,6 +220,7 @@ namespace {
         ss << " " << UCI::move(m, pos.is_chess960());
         sync_cout << ss.str() << sync_endl;
     } else {
+        // TODO: what to output here.
         sync_cout << "no moves" << sync_endl;
     }
  
