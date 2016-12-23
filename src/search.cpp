@@ -383,10 +383,12 @@ void MainThread::search() {
       && !Limits.depth
       && !Skill(Options["Skill Level"]).enabled()
       &&  rootMoves[0].pv[0] != MOVE_NONE)
+  {
       for (Thread* th : Threads)
           if (   th->completedDepth > bestThread->completedDepth
               && th->rootMoves[0].score > bestThread->rootMoves[0].score)
               bestThread = th;
+  }
 
   previousScore = bestThread->rootMoves[0].score;
 
