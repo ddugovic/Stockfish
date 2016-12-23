@@ -390,36 +390,8 @@ void MainThread::search() {
 
   previousScore = bestThread->rootMoves[0].score;
 
-  bool ttHit = true;
-  bool modified = false;
-  // TODO: ensure this is a copy so we're not changing internals.
-  Position &pos = bestThread->rootPos;
-  StateInfo st;
-  std::vector<Move> &pv = bestThread->rootMoves[0].pv;
-
-  // Play out the moves from the pv on the position
-  for (auto &m : pv) {
-      pos.do_move(m, st);
-  }
-  while(ttHit) {
-      TTEntry* tte = TT.probe(pos.key(), ttHit);
-      if (ttHit) {
-          Move m = tte->move(); // Local copy to be SMP safe
-          if (MoveList<LEGAL>(pos).contains(m)) {
-              bestThread->rootMoves[0].pv.push_back(m);
-              pos.do_move(m, st);
-              modified = true;
-          } else {
-              break;  
-          }
-      }
-  }
-  for (auto m = pv.rbegin(); m != pv.rend(); ++m) {
-      pos.undo_move(*m);
-  }
-
   // Send new PV when needed
-  if (bestThread != this || modified)
+  if (bestThread != this)
       sync_cout << UCI::pv(bestThread->rootPos, bestThread->completedDepth, -VALUE_INFINITE, VALUE_INFINITE) << sync_endl;
 
 

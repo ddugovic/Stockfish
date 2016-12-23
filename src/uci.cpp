@@ -21,6 +21,7 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #include "evaluate.h"
 #include "movegen.h"
@@ -29,6 +30,7 @@
 #include "thread.h"
 #include "timeman.h"
 #include "uci.h"
+#include "tt.h"
 #include "syzygy/tbprobe.h"
 
 using namespace std;
@@ -169,6 +171,66 @@ namespace {
     Threads.start_thinking(pos, States, limits);
   }
 
+  // Extract the next move from the TT
+
+  void extract_move_from_tt(Position& pos, istringstream& is) {
+
+    Move m;
+    string token, fen;
+    vector<Move> moves;
+
+    StateListPtr pvMovesStates(new std::deque<StateInfo>(1));
+    pvMovesStates = StateListPtr(new std::deque<StateInfo>(1));
+    if (is >> token && token == "moves") {
+        // Parse move list (if any)
+        while (is >> token && (m = UCI::to_move(pos, token)) != MOVE_NONE)
+        {
+            if (MoveList<LEGAL>(pos).contains(m)) {
+                pvMovesStates->push_back(StateInfo());
+                pos.do_move(m, pvMovesStates->back());
+                moves.push_back(m);
+            } else {
+                //TODO: do what!?
+            }
+        }
+    }
+    bool ttHit = false;
+    TTEntry* tte = TT.probe(pos.key(), ttHit);
+    if (ttHit) {
+        m = tte->move(); // Local copy to be SMP safe
+
+        stringstream ss; 
+        Depth d = tte->depth();
+        Value v = tte->value();
+
+        // TODO: not sure what this does.
+        /*bool tb = TB::RootInTB && abs(v) < VALUE_MATE - MAX_PLY;
+        v = tb ? TB::Score : v;*/
+
+        ss << "info"
+           << " depth "    << d / ONE_PLY
+           << " score "    << UCI::value(v);
+
+        // TODO: Not sure how to get access to alpha//beta to calc this.
+        /*if (!tb && i == PVIdx)
+            ss << (v >= beta ? " lowerbound" : v <= alpha ? " upperbound" : "");*/
+
+        ss << " pv";
+
+        ss << " " << UCI::move(m, pos.is_chess960());
+        sync_cout << ss.str() << sync_endl;
+    } else {
+        sync_cout << "no moves" << sync_endl;
+    }
+ 
+    for (auto i = moves.rbegin(); i != moves.rend(); ++i) {
+        pos.undo_move(*i);
+    }
+
+
+  }
+
+
 } // namespace
 
 
@@ -244,6 +306,8 @@ void UCI::loop(int argc, char* argv[]) {
 
           benchmark(pos, ss);
       }
+      // Additional custom lichess commands
+      else if (token == "pv")       extract_move_from_tt(pos, is);
       else
           sync_cout << "Unknown command: " << cmd << sync_endl;
 
