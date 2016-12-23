@@ -180,7 +180,6 @@ namespace {
     vector<Move> moves;
 
     StateListPtr pvMovesStates(new std::deque<StateInfo>(1));
-    pvMovesStates = StateListPtr(new std::deque<StateInfo>(1));
     if (is >> token && token == "moves") {
         // Parse move list (if any)
         while (is >> token && (m = UCI::to_move(pos, token)) != MOVE_NONE)
