@@ -198,14 +198,16 @@ namespace {
     if (ttHit) {
         m = tte->move(); // Local copy to be SMP safe
 
-        stringstream ss; 
         Depth d = tte->depth();
+        // TODO: this seems swap between +/- need to figure
+        //       out how to make that consistent, right?
         Value v = tte->value();
 
         // TODO: not sure what this does.
         /*bool tb = TB::RootInTB && abs(v) < VALUE_MATE - MAX_PLY;
         v = tb ? TB::Score : v;*/
 
+        stringstream ss; 
         ss << "info"
            << " depth "    << d / ONE_PLY
            << " score "    << UCI::value(v);
