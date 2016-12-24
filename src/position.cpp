@@ -1741,6 +1741,27 @@ Key Position::key_after(Move m) const {
 }
 
 
+#ifdef ATOMIC
+Value Position::atomic_see(Move m) const {
+  assert(is_ok(m));
+
+  Square from = from_sq(m), to = to_sq(m);
+  Color stm = color_of(piece_on(from));
+
+  Value blast_eval = VALUE_ZERO;
+  Bitboard blast = attacks_from<KING>(to) & (pieces() ^ pieces(PAWN)) & ~SquareBB[from];
+  if (blast & pieces(~stm,KING))
+      return VALUE_MATE;
+  for (Color c = WHITE; c <= BLACK; ++c)
+      for (PieceType pt = KNIGHT; pt <= QUEEN; ++pt)
+          if (c == stm)
+              blast_eval -= popcount(blast & pieces(c,pt)) * PieceValue[var][MG][pt];
+          else
+              blast_eval += popcount(blast & pieces(c,pt)) * PieceValue[var][MG][pt];
+  return blast_eval + PieceValue[var][MG][piece_on(to_sq(m))] - PieceValue[var][MG][moved_piece(m)];
+}
+#endif
+
 /// Position::see_ge (Static Exchange Evaluation Greater or Equal) tests if the
 /// SEE value of move is greater or equal to the given value. We'll use an
 /// algorithm similar to alpha-beta pruning with a null window.

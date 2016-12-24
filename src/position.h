@@ -150,6 +150,9 @@ public:
   void undo_null_move();
 
   // Static Exchange Evaluation
+#ifdef ATOMIC
+  Value atomic_see(Move m) const;
+#endif
   bool see_ge(Move m, Value value) const;
 
   // Accessing hash keys
