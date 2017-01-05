@@ -81,7 +81,13 @@ const char* WdlSuffixes[SUBVARIANT_NB] = {
     nullptr,
 #endif
 #ifdef THREECHECK
-    nullptr
+    nullptr,
+#endif
+#ifdef SUICIDE
+    ".stbw",
+#endif
+#ifdef LOOP
+    nullptr,
 #endif
 };
 
@@ -115,7 +121,7 @@ const char* PawnlessWdlSuffixes[SUBVARIANT_NB] = {
     nullptr,
 #endif
 #ifdef SUICIDE
-    ".stbw",
+    ".gtbw",
 #endif
 #ifdef LOOP
     nullptr,
@@ -159,7 +165,7 @@ const char* DtzSuffixes[SUBVARIANT_NB] = {
 #endif
 };
 
-const char* PawnlessDtzSuffixes[VARIANT_NB] = {
+const char* PawnlessDtzSuffixes[SUBVARIANT_NB] = {
     nullptr,
 #ifdef ANTI
     ".stbz",
@@ -186,7 +192,13 @@ const char* PawnlessDtzSuffixes[VARIANT_NB] = {
     nullptr,
 #endif
 #ifdef THREECHECK
-    nullptr
+    nullptr,
+#endif
+#ifdef SUICIDE
+    ".gtbz",
+#endif
+#ifdef LOOP
+    nullptr,
 #endif
 };
 
@@ -1148,6 +1160,9 @@ T do_probe_table(const Position& pos,  Entry* entry, WDLScore wdl, ProbeState* r
 #ifdef ANTI
         connectedKings = connectedKings || entry->variant == ANTI_VARIANT;
 #endif
+#ifdef SUICIDE
+        connectedKings = connectedKings || entry->variant == SUICIDE_VARIANT;
+#endif
 
         if (connectedKings) {
             int adjust = squares[1] > squares[0];
@@ -1479,6 +1494,10 @@ void do_init(Entry& e, T& p, uint8_t* data) {
             if (!IsWDL && e.variant == ANTI_VARIANT && item(p, i, f).precomp->flags & TBFlag::SingleValue)
                 item(p, i, f).precomp->minSymLen = 1;
 #endif
+#ifdef SUICIDE
+            if (!IsWDL && e.variant == SUICIDE_VARIANT && item(p, i, f).precomp->flags & TBFlag::SingleValue)
+                item(p, i, f).precomp->minSymLen = 1;
+#endif
         }
 
     if (!IsWDL)
@@ -1601,7 +1620,7 @@ void* init(Entry& e, const Position& pos) {
 #endif
     };
 
-    const uint8_t PAWNLESS_TB_MAGIC[VARIANT_NB][2][4] = {
+    const uint8_t PAWNLESS_TB_MAGIC[SUBVARIANT_NB][2][4] = {
         {
             { 0xD7, 0x66, 0x0C, 0xA5 },
             { 0x71, 0xE8, 0x23, 0x5D }
@@ -1660,6 +1679,18 @@ void* init(Entry& e, const Position& pos) {
             { 0x71, 0xE8, 0x23, 0x5D }
         },
 #endif
+#ifdef SUICIDE
+        {
+            { 0xD6, 0xF5, 0x1B, 0x50 },
+            { 0xBC, 0x55, 0xBC, 0x21 }
+        },
+#endif
+#ifdef LOOP
+        {
+            { 0xD7, 0x66, 0x0C, 0xA5 },
+            { 0x71, 0xE8, 0x23, 0x5D }
+        },
+#endif
     };
 
     fname = e.key == pos.material_key() ? w + 'v' + b : b + 'v' + w;
@@ -1708,24 +1739,26 @@ void* init(Entry& e, const Position& pos) {
     return e.baseAddress;
 }
 
+template<typename T>
+T result_to_score(Value value) {
+    if (value > 0)
+        return std::is_same<T, WDLScore>::value ? T(WDLWin) : T(1);
+    else if (value < 0)
+        return std::is_same<T, WDLScore>::value ? T(WDLLoss) : T(-1);
+    else
+        return T(WDLDraw);
+}
+
 template<typename E, typename T = typename Ret<E>::type>
 T probe_table(const Position& pos, ProbeState* result, WDLScore wdl = WDLDraw) {
 
-#ifdef ATOMIC
-    if (pos.is_atomic()) {
-        if (pos.is_atomic_loss())
-            return std::is_same<T, WDLScore>::value ? T(WDLLoss) : T(-1);
-        if (pos.is_atomic_win())
-            return std::is_same<T, WDLScore>::value ? T(WDLWin) : T(1);
-    }
-#endif
+    if (pos.is_variant_end())
+        return result_to_score<T>(pos.variant_result());
 
 #ifdef ANTI
     if (pos.is_anti()) {
-        if (pos.is_anti_loss())
-            return std::is_same<T, WDLScore>::value ? T(WDLLoss) : T(-1);
-        if (pos.is_anti_win())
-            return std::is_same<T, WDLScore>::value ? T(WDLWin) : T(1);
+        if (MoveList<LEGAL>(pos).size() == 0)
+            return result_to_score<T>(pos.stalemate_value());
     } else
 #endif
     if (!(pos.pieces() ^ pos.pieces(KING)))
@@ -2023,7 +2056,13 @@ void Tablebases::init(const std::string& paths, Variant variant) {
         }
 
 #ifdef ANTI
-    if (variant == ANTI_VARIANT) {
+    bool oneKing = true;
+    oneKing = oneKing && variant != ANTI_VARIANT;
+#ifdef SUICIDE
+    oneKing = oneKing && variant != SUICIDE_VARIANT;
+#endif
+
+    if (!oneKing) {
         for (PieceType p1 = PAWN; p1 <= KING; ++p1) {
             for (PieceType p2 = PAWN; p2 <= p1; ++p2) {
                 EntryTable.insert({p1}, {p2}, variant);
