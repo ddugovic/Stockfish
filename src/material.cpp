@@ -288,18 +288,6 @@ namespace {
     },
 #endif
   };
-#ifdef CRAZYHOUSE
-  const int QuadraticTheirsInHand[PIECE_TYPE_NB][PIECE_TYPE_NB] = {
-      //           THEIR PIECES
-      //empty pawn knight bishop rook queen
-      {   0                               }, // Empty hand
-      {  -6,    0                         }, // Pawn
-      {   7,   13,   0                    }, // Knight      OUR PIECES
-      { -19,   34, -17,     0             }, // Bishop
-      { -37,   -8,  -7,     7,     0      }, // Rook
-      {   1,   16, -25,    32,    -3,   0 }  // Queen
-  };
-#endif
 
   // PawnsSet[count] contains a bonus/malus indexed by number of pawns
   const int PawnsSet[FILE_NB + 1] = {
@@ -369,38 +357,53 @@ namespace {
 #endif
                       QUEEN;
 
-    for (int pt1 = NO_PIECE_TYPE; pt1 <= pt_max; ++pt1)
-    {
-        if (!pieceCount[Us][pt1])
-            continue;
-
-        int v = 0;
-
-        for (int pt2 = NO_PIECE_TYPE; pt2 <= pt1; ++pt2)
-            v +=  QuadraticOurs[pos.variant()][pt1][pt2] * pieceCount[Us][pt2]
-                + QuadraticTheirs[pos.variant()][pt1][pt2] * pieceCount[Them][pt2];
-
-        bonus += pieceCount[Us][pt1] * v;
-    }
+  const int *pieceCountUs = pieceCount[Us];
+  const int *pieceCountThem = pieceCount[Them];
 #ifdef CRAZYHOUSE
-    for (int pt1 = NO_PIECE_TYPE; pt1 <= pt_max; ++pt1)
-    {
+  if (pos.is_house()) {
+    int pieceTotalUs[PIECE_TYPE_NB];
+    int pieceTotalThem[PIECE_TYPE_NB];
+
+    for (int pt1 = NO_PIECE_TYPE; pt1 <= pt_max; ++pt1) {
+      pieceTotalUs[pt1] = pieceCountInHand[Us][pt1] + pieceCountUs[pt1];
+      pieceTotalThem[pt1] = pieceCountInHand[Them][pt1] + pieceCountThem[pt1];
+    }
+
+    pieceCountUs = pieceTotalUs;
+    pieceCountThem = pieceTotalThem;
+
+    for (int pt1 = NO_PIECE_TYPE; pt1 <= pt_max; ++pt1) {
         if (!pieceCountInHand[Us][pt1])
             continue;
 
         int v = 0;
 
         for (int pt2 = NO_PIECE_TYPE; pt2 <= pt1; ++pt2)
-            v +=  QuadraticOursInHand[pt1][pt2] * pieceCountInHand[Us][pt2]
-                + QuadraticTheirsInHand[pt1][pt2] * pieceCountInHand[Them][pt2];
+            v += QuadraticOursInHand[pt1][pt2] * pieceCountInHand[Us][pt2];
 
         bonus += pieceCountInHand[Us][pt1] * v;
     }
+  }
 #endif
+
+    const int variant = pos.variant();
+
+    for (int pt1 = NO_PIECE_TYPE; pt1 <= pt_max; ++pt1)
+    {
+        if (!pieceCountUs[pt1])
+            continue;
+
+        int v = 0;
+
+        for (int pt2 = NO_PIECE_TYPE; pt2 <= pt1; ++pt2)
+            v +=  QuadraticOurs[variant][pt1][pt2] * pieceCountUs[pt2]
+                + QuadraticTheirs[variant][pt1][pt2] * pieceCountThem[pt2];
+
+        bonus += pieceCountUs[pt1] * v;
+    }
 
     return bonus;
   }
-
 } // namespace
 
 namespace Material {
