@@ -31,6 +31,8 @@ To get more information please visit the [Multi Variant Stockfish Wiki](https://
 
 There are precompiled [binary releases](https://github.com/ddugovic/Stockfish/releases) and the following development snapshots:
 
+There are precompiled [binary development releases](https://github.com/ddugovic/Stockfish/actions/workflows/build-windows.yml)
+
 Operating System | Status | profile-build
 --- | --- | ---
 Windows | [![Build status](https://ci.appveyor.com/api/projects/status/aeevqaqe30lrivka/branch/master?svg=true)](https://ci.appveyor.com/project/niklasf/stockfish-imnn1/branch/master) | [x86_64](https://s3-us-west-2.amazonaws.com/variant-stockfish/ddugovic/master/stockfish-windows-x86_64.exe), [x86_64-modern](https://s3-us-west-2.amazonaws.com/variant-stockfish/ddugovic/master/stockfish-windows-x86_64-modern.exe), [x86_64-bmi2](https://s3-us-west-2.amazonaws.com/variant-stockfish/ddugovic/master/stockfish-windows-x86_64-bmi2.exe)
