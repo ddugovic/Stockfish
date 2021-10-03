@@ -18,7 +18,11 @@ jobs:
         python-version: 3.7
     - name: configure
       run: sudo apt install expect && pip3 install chess && git clone https://github.com/ddugovic/chess-artist.git ./tests/chess-artist --depth 1
-    - name: make
+    - name: make default
+      run: cd src && make -j3 build ARCH=x86-64 COMP=clang debug=yes
+    - name: make modern
+      run: cd src && make -j3 build ARCH=x86-64-modern COMP=clang debug=yes
+    - name: make bmi2
       run: cd src && make -j3 build ARCH=x86-64-bmi2 COMP=clang debug=yes
     - name: make net
       run: cd src && make net
