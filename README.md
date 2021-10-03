@@ -1,6 +1,7 @@
 ## Overview
 
 [![Build Status](https://github.com/ddugovic/Stockfish/actions/workflows/stockfish.yml/badge.svg)](https://github.com/ddugovic/Stockfish/actions)
+[![build windows](https://github.com/ddugovic/Stockfish/actions/workflows/build.yml/badge.svg)](https://github.com/ddugovic/Stockfish/actions/workflows/build.yml)
 [![Build Status](https://ci.appveyor.com/api/projects/status/github/ddugovic/Stockfish?branch=master&svg=true)](https://ci.appveyor.com/project/ddugovic/Stockfish/branch/master)
 
 Multi Variant Stockfish is a [Stockfish](https://github.com/official-stockfish/Stockfish) fork specialized to play chess and some chess [variants](https://lichess.org/variant):
