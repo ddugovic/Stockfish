@@ -19,11 +19,27 @@
 ### Section 1. General Configuration
 ### ==========================================================================
 
+### Establish the operating system name
+KERNEL = $(shell uname -s)
+ifeq ($(KERNEL),Linux)
+	OS = $(shell uname -o)
+endif
+
+### Target Windows OS
+ifeq ($(OS),Windows_NT)
+	target_windows = yes
+else ifeq ($(COMP),mingw)
+	target_windows = yes
+	ifeq ($(WINE_PATH),)
+		WINE_PATH = $(shell which wine)
+	endif
+endif
+
 ### Executable name
-ifeq ($(COMP),mingw)
-EXE = stockfish.exe
+ifeq ($(target_windows),yes)
+	EXE = stockfish.exe
 else
-EXE = stockfish
+	EXE = stockfish
 endif
 
 ### Installation dir definitions
@@ -32,9 +48,9 @@ BINDIR = $(PREFIX)/bin
 
 ### Built-in benchmark for pgo-builds
 ifeq ($(SDE_PATH),)
-	PGOBENCH = ./$(EXE) bench
+	PGOBENCH = $(WINE_PATH) ./$(EXE) bench
 else
-	PGOBENCH = $(SDE_PATH) -- ./$(EXE) bench
+	PGOBENCH = $(SDE_PATH) -- $(WINE_PATH) ./$(EXE) bench
 endif
 
 ### Source and object files
@@ -58,12 +74,6 @@ ifeq (,$(filter -DUSE_NNUE,$(CXXFLAGS)))
 VPATH = syzygy
 else
 VPATH = syzygy:nnue:nnue/features
-endif
-
-### Establish the operating system name
-KERNEL = $(shell uname -s)
-ifeq ($(KERNEL),Linux)
-	OS = $(shell uname -o)
 endif
 
 ### ==========================================================================
@@ -379,29 +389,27 @@ ifeq ($(COMP),gcc)
 	endif
 endif
 
+ifeq ($(target_windows),yes)
+	LDFLAGS += -static
+endif
+
 ifeq ($(COMP),mingw)
 	comp=mingw
 
-	ifeq ($(KERNEL),Linux)
-		ifeq ($(bits),64)
-			ifeq ($(shell which x86_64-w64-mingw32-c++-posix),)
-				CXX=x86_64-w64-mingw32-c++
-			else
-				CXX=x86_64-w64-mingw32-c++-posix
-			endif
+	ifeq ($(bits),64)
+		ifeq ($(shell which x86_64-w64-mingw32-c++-posix 2> /dev/null),)
+			CXX=x86_64-w64-mingw32-c++
 		else
-			ifeq ($(shell which i686-w64-mingw32-c++-posix),)
-				CXX=i686-w64-mingw32-c++
-			else
-				CXX=i686-w64-mingw32-c++-posix
-			endif
+			CXX=x86_64-w64-mingw32-c++-posix
 		endif
 	else
-		CXX=g++
+		ifeq ($(shell which i686-w64-mingw32-c++-posix 2> /dev/null),)
+			CXX=i686-w64-mingw32-c++
+		else
+			CXX=i686-w64-mingw32-c++-posix
+		endif
 	endif
-
 	CXXFLAGS += -pedantic -Wextra -Wshadow
-	LDFLAGS += -static
 endif
 
 ifeq ($(COMP),icc)
@@ -413,16 +421,16 @@ endif
 ifeq ($(COMP),clang)
 	comp=clang
 	CXX=clang++
+	ifeq ($(target_windows),yes)
+		CXX=x86_64-w64-mingw32-clang++
+	endif
+
 	CXXFLAGS += -pedantic -Wextra -Wshadow
 
-	ifneq ($(KERNEL),Darwin)
-	ifneq ($(KERNEL),OpenBSD)
-	ifneq ($(KERNEL),FreeBSD)
-	ifneq ($(findstring MINGW,$(KERNEL)),MINGW)
+	ifeq ($(filter $(KERNEL),Darwin OpenBSD FreeBSD),)
+	ifeq ($(target_windows),)
 	ifneq ($(RTLIB),compiler-rt)
 		LDFLAGS += -latomic
-	endif
-	endif
 	endif
 	endif
 	endif
@@ -436,11 +444,6 @@ ifeq ($(COMP),clang)
 		CXXFLAGS += -m$(bits)
 		LDFLAGS += -m$(bits)
 	endif
-
-	ifeq ($(findstring MINGW,$(KERNEL)),MINGW)
-		LDFLAGS += -static
-	endif
-
 endif
 
 ifeq ($(KERNEL),Darwin)
@@ -725,9 +728,7 @@ ifeq ($(optimize),yes)
 ifeq ($(debug), no)
 	ifeq ($(comp),clang)
 		CXXFLAGS += -flto
-		ifneq ($(findstring MINGW,$(KERNEL)),)
-			CXXFLAGS += -fuse-ld=lld
-		else ifneq ($(findstring MSYS,$(KERNEL)),)
+		ifeq ($(target_windows),yes)
 			CXXFLAGS += -fuse-ld=lld
 		endif
 		LDFLAGS += $(CXXFLAGS)
@@ -738,25 +739,17 @@ ifeq ($(debug), no)
 	ifeq ($(gccisclang),)
 		CXXFLAGS += -flto
 		LDFLAGS += $(CXXFLAGS) -flto=jobserver
-		ifneq ($(findstring MINGW,$(KERNEL)),)
-			LDFLAGS += -save-temps
-		else ifneq ($(findstring MSYS,$(KERNEL)),)
-			LDFLAGS += -save-temps
-		endif
 	else
 		CXXFLAGS += -flto
 		LDFLAGS += $(CXXFLAGS)
 	endif
 
-# To use LTO and static linking on windows, the tool chain requires a recent gcc:
-# gcc version 10.1 in msys2 or TDM-GCC version 9.2 are known to work, older might not.
-# So, only enable it for a cross from Linux by default.
+# To use LTO and static linking on Windows,
+# the tool chain requires gcc version 10.1 or later.
 	else ifeq ($(comp),mingw)
-	ifeq ($(KERNEL),Linux)
 	ifneq ($(arch),i386)
-		CXXFLAGS += -flto
-		LDFLAGS += $(CXXFLAGS) -flto=jobserver
-	endif
+		CXXFLAGS += -flto=auto
+		LDFLAGS += $(CXXFLAGS) -save-temps
 	endif
 	endif
 endif
@@ -912,8 +905,9 @@ profileclean:
 	@rm -rf profdir
 	@rm -f bench.txt *.gcda *.gcno ./syzygy/*.gcda ./nnue/*.gcda ./nnue/features/*.gcda *.s
 	@rm -f stockfish.profdata *.profraw
-	@rm -f stockfish.exe.lto_wrapper_args
-	@rm -f stockfish.exe.ltrans.out
+	@rm -f stockfish.*args*
+	@rm -f stockfish.*lt*
+	@rm -f stockfish.res
 	@rm -f ./-lstdc++.res
 
 default:
