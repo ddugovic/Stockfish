@@ -1,0 +1,51 @@
+name: Release
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  windows:
+    runs-on: ubuntu-20.04
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: install
+        run: sudo apt install mingw-w64
+
+      - name: make x86-64
+        run: cd src && make clean && make -j build COMP=mingw ARCH=x86-64 EXE=multi-variant-stockfish_x86-64.exe && strip multi-variant-stockfish_x86-64.exe
+
+      - name: make x86-64-modern
+        run: cd src && make clean && make -j build COMP=mingw ARCH=x86-64-modern EXE=multi-variant-stockfish_x86-64-modern.exe && strip multi-variant-stockfish_x86-64-modern.exe
+
+      - name: make x86-64-bmi2
+        run: cd src && make clean && make -j build COMP=mingw ARCH=x86-64-bmi2 EXE=multi-variant-stockfish_x86-64-bmi2.exe && strip multi-variant-stockfish_x86-64-bmi2.exe
+
+      - uses: actions/upload-artifact@v2
+        with:
+          name: multi-variant-stockfish
+          path: src/multi-variant-stockfish*.exe
+
+  linux:
+    runs-on: ubuntu-20.04
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: make x86-64
+        run: cd src && make clean && make -j build COMP=gcc ARCH=x86-64 EXE=multi-variant-stockfish_x86-64 && strip multi-variant-stockfish_x86-64
+
+      - name: make x86-64-modern
+        run: cd src && make clean && make -j build COMP=gcc ARCH=x86-64-modern EXE=multi-variant-stockfish_x86-64-modern && strip multi-variant-stockfish_x86-64-modern
+
+      - name: make x86-64-bmi2
+        run: cd src && make clean && make -j build COMP=gcc ARCH=x86-64-bmi2 EXE=multi-variant-stockfish_x86-64-bmi2 && strip multi-variant-stockfish_x86-64-bmi2
+
+      - uses: actions/upload-artifact@v2
+        with:
+          name: multi-variant-stockfish
+          path: src/multi-variant-stockfish*
