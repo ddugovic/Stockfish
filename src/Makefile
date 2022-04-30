@@ -56,28 +56,14 @@ else
 endif
 
 ### Source and object files
-ifneq ($(nnue),no)
-	CXXFLAGS += -DUSE_NNUE
-endif
-
-ifeq (,$(filter -DUSE_NNUE,$(CXXFLAGS)))
-	SRCS = benchmark.cpp bitbase.cpp bitboard.cpp endgame.cpp evaluate.cpp main.cpp \
-		material.cpp misc.cpp movegen.cpp movepick.cpp pawns.cpp position.cpp psqt.cpp \
-		search.cpp thread.cpp timeman.cpp tt.cpp uci.cpp ucioption.cpp tune.cpp syzygy/tbprobe.cpp
-else
-	SRCS = benchmark.cpp bitbase.cpp bitboard.cpp endgame.cpp evaluate.cpp main.cpp \
-		material.cpp misc.cpp movegen.cpp movepick.cpp pawns.cpp position.cpp psqt.cpp \
-		search.cpp thread.cpp timeman.cpp tt.cpp uci.cpp ucioption.cpp tune.cpp syzygy/tbprobe.cpp \
-		nnue/evaluate_nnue.cpp nnue/features/half_ka_v2_hm.cpp
-endif
+SRCS = benchmark.cpp bitbase.cpp bitboard.cpp endgame.cpp evaluate.cpp main.cpp \
+	material.cpp misc.cpp movegen.cpp movepick.cpp pawns.cpp position.cpp psqt.cpp \
+	search.cpp thread.cpp timeman.cpp tt.cpp uci.cpp ucioption.cpp tune.cpp syzygy/tbprobe.cpp \
+	nnue/evaluate_nnue.cpp nnue/features/half_ka_v2_hm.cpp
 
 OBJS = $(notdir $(SRCS:.cpp=.o))
 
-ifeq (,$(filter -DUSE_NNUE,$(CXXFLAGS)))
-	VPATH = syzygy
-else
-	VPATH = syzygy:nnue:nnue/features
-endif
+VPATH = syzygy:nnue:nnue/features
 
 ### ==========================================================================
 ### Section 2. High-level Configuration
@@ -109,7 +95,6 @@ endif
 # vnni256 = yes/no    --- -mavx512vnni     --- Use Intel Vector Neural Network Instructions 256
 # vnni512 = yes/no    --- -mavx512vnni     --- Use Intel Vector Neural Network Instructions 512
 # neon = yes/no       --- -DUSE_NEON       --- Use ARM SIMD architecture
-# nnue = yes/no       --- -DUSE_NNUE       --- Use Effectively Updateable Neural Network
 #
 # Note that Makefile is space sensitive, so when adding new architectures
 # or modifying existing flags, you have to make sure there are no extra spaces
@@ -534,68 +519,6 @@ ifneq ($(comp),mingw)
 endif
 
 ### 3.2.1 Debugging
-CXXFLAGS += -DANTI -DANTIHELPMATE -DATOMIC -DBUGHOUSE -DCRAZYHOUSE -DDISPLACEDGRID -DEXTINCTION -DGIVEAWAY -DGRID -DHELPMATE -DHORDE -DKNIGHTRELAY -DKOTH -DLOOP -DLOSERS -DPLACEMENT -DRACE -DRELAY -DSLIPPEDGRID -DSUICIDE -DTHREECHECK -DTWOKINGS -DTWOKINGSSYMMETRIC
-
-ifneq (,$(filter -DBUGHOUSE,$(CXXFLAGS)))
-	ifeq (,$(filter -DCRAZYHOUSE,$(CXXFLAGS)))
-		$(error Crazyhouse (-DCRAZYHOUSE) is required for subvariant bughouse chess)
-	endif
-endif
-
-ifneq (,$(filter -DDISPLACEDGRID,$(CXXFLAGS)))
-	ifeq (,$(filter -DGRID,$(CXXFLAGS)))
-		$(error Grid (-GRID) is required for subvariant displaced grid)
-	endif
-endif
-
-ifneq (,$(filter -DLOOP,$(CXXFLAGS)))
-	ifeq (,$(filter -DCRAZYHOUSE,$(CXXFLAGS)))
-		$(error Crazyhouse (-DCRAZYHOUSE) is required for subvariant loop chess)
-	endif
-endif
-
-ifneq (,$(filter -DPLACEMENT,$(CXXFLAGS)))
-	ifeq (,$(filter -DCRAZYHOUSE,$(CXXFLAGS)))
-		$(error Crazyhouse (-DCRAZYHOUSE) is required for subvariant placement chess)
-	endif
-endif
-
-ifneq (,$(filter -DSLIPPEDGRID,$(CXXFLAGS)))
-	ifeq (,$(filter -DGRID,$(CXXFLAGS)))
-		$(error Grid (-GRID) is required for subvariant slipped grid)
-	endif
-endif
-
-ifneq (,$(filter -DGIVEAWAY,$(CXXFLAGS)))
-	ifeq (,$(filter -DANTI,$(CXXFLAGS)))
-		$(error Antichess (-DANTI) is required for subvariant giveaway chess)
-	endif
-endif
-
-ifneq (,$(filter -DSUICIDE,$(CXXFLAGS)))
-	ifeq (,$(filter -DANTI,$(CXXFLAGS)))
-		$(error Antichess (-DANTI) is required for subvariant suicide chess)
-	endif
-endif
-
-ifneq (,$(filter -DKNIGHTRELAY,$(CXXFLAGS)))
-	ifeq (,$(filter -DRELAY,$(CXXFLAGS)))
-		$(error Relay (-DRELAY) is required for subvariant knight-relay)
-	endif
-endif
-
-ifneq (,$(filter -DTWOKINGSSYMMETRIC,$(CXXFLAGS)))
-	ifeq (,$(filter -DTWOKINGS,$(CXXFLAGS)))
-		$(error Twokings (-DTWOKINGS) is required for subvariant twokingssymmetric)
-	endif
-endif
-
-ifneq (,$(filter -DANTIHELPMATE,$(CXXFLAGS)))
-	ifeq (,$(filter -DHELPMATE,$(CXXFLAGS)))
-		$(error Helpmate (-HELPMATE) is required for subvariant antihelpmate)
-	endif
-endif
-
 ifeq ($(debug),no)
 	CXXFLAGS += -DNDEBUG
 else
