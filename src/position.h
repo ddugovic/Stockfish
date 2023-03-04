@@ -29,7 +29,9 @@
 #include "psqt.h"
 #include "types.h"
 
+#ifdef USE_NNUE
 #include "nnue/nnue_accumulator.h"
+#endif
 
 namespace Stockfish {
 
@@ -58,9 +60,11 @@ struct StateInfo {
   Piece      capturedPiece;
   int        repetition;
 
+#ifdef USE_NNUE
   // Used by NNUE
   Eval::NNUE::Accumulator accumulator;
   DirtyPiece dirtyPiece;
+#endif
 };
 
 

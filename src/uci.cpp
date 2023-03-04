@@ -87,7 +87,9 @@ namespace {
     Position p;
     p.set(pos.fen(), Options["UCI_Chess960"], &states->back(), Threads.main());
 
+#ifdef USE_NNUE
     Eval::NNUE::verify();
+#endif
 
     sync_cout << "\n" << Eval::trace(p) << sync_endl;
   }
@@ -281,6 +283,7 @@ void UCI::loop(int argc, char* argv[]) {
       else if (token == "d")        sync_cout << pos << sync_endl;
       else if (token == "eval")     trace_eval(pos);
       else if (token == "compiler") sync_cout << compiler_info() << sync_endl;
+#ifdef USE_NNUE
       else if (token == "export_net")
       {
           std::optional<std::string> filename;
@@ -289,6 +292,7 @@ void UCI::loop(int argc, char* argv[]) {
               filename = f;
           Eval::NNUE::save_eval(filename);
       }
+#endif
       else if (token == "--help" || token == "help" || token == "--license" || token == "license")
           sync_cout << "\nStockfish is a powerful chess engine for playing and analyzing."
                        "\nIt is released as free software licensed under the GNU GPLv3 License."

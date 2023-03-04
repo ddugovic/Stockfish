@@ -160,16 +160,20 @@ vector<string> setup_bench(const Position& current, istream& is) {
           list.emplace_back(fen);
       else
       {
+#ifdef USE_NNUE
           if (evalType == "classical" || (evalType == "mixed" && posCounter % 2 == 0))
               list.emplace_back("setoption name Use NNUE value false");
           else if (evalType == "NNUE" || (evalType == "mixed" && posCounter % 2 != 0))
               list.emplace_back("setoption name Use NNUE value true");
+#endif
           list.emplace_back("position fen " + fen);
           list.emplace_back(go);
           ++posCounter;
       }
 
+#ifdef USE_NNUE
   list.emplace_back("setoption name Use NNUE value true");
+#endif
 
   return list;
 }

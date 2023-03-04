@@ -45,6 +45,7 @@
 //     const unsigned char *const gEmbeddedNNUEEnd;     // a marker to the end
 //     const unsigned int         gEmbeddedNNUESize;    // the size of the embedded file
 // Note that this does not work in Microsoft Visual Studio.
+#ifdef USE_NNUE
 #if !defined(_MSC_VER) && !defined(NNUE_EMBEDDING_OFF)
   INCBIN(EmbeddedNNUE, EvalFileDefaultName);
 #else
@@ -52,12 +53,14 @@
   const unsigned char *const gEmbeddedNNUEEnd = &gEmbeddedNNUEData[1];
   const unsigned int         gEmbeddedNNUESize = 1;
 #endif
+#endif
 
 
 using namespace std;
 
 namespace Stockfish {
 
+#ifdef USE_NNUE
 namespace Eval {
 
   bool useNNUE;
@@ -146,6 +149,7 @@ namespace Eval {
         sync_cout << "info string classical evaluation enabled" << sync_endl;
   }
 }
+#endif
 
 namespace Trace {
 
@@ -1056,10 +1060,15 @@ Value Eval::evaluate(const Position& pos) {
   // We use the much less accurate but faster Classical eval when the NNUE
   // option is set to false. Otherwise we use the NNUE eval unless the
   // PSQ advantage is decisive. (~4 Elo at STC, 1 Elo at LTC)
+#ifdef USE_NNUE
   bool useClassical = !useNNUE || abs(psq) > 2048;
+#else
+  bool useClassical = true;
+#endif
 
   if (useClassical)
       v = Evaluation<NO_TRACE>(pos).value();
+#ifdef USE_NNUE
   else
   {
       int nnueComplexity;
@@ -1074,6 +1083,7 @@ Value Eval::evaluate(const Position& pos) {
       optimism += optimism * (nnueComplexity + abs(psq - nnue)) / 512;
       v = (nnue * (945 + npm) + optimism * (150 + npm)) / 1024;
   }
+#endif
 
   // Damp down the evaluation linearly when shuffling
   v = v * (200 - pos.rule50_count()) / 214;
@@ -1131,25 +1141,31 @@ std::string Eval::trace(Position& pos) {
      << "|      Total | " << Term(TOTAL)
      << "+------------+-------------+-------------+-------------+\n";
 
+#ifdef USE_NNUE
   if (Eval::useNNUE)
       ss << '\n' << NNUE::trace(pos) << '\n';
+#endif
 
   ss << std::showpoint << std::showpos << std::fixed << std::setprecision(2) << std::setw(15);
 
   v = pos.side_to_move() == WHITE ? v : -v;
   ss << "\nClassical evaluation   " << to_cp(v) << " (white side)\n";
+#ifdef USE_NNUE
   if (Eval::useNNUE)
   {
       v = NNUE::evaluate(pos, false);
       v = pos.side_to_move() == WHITE ? v : -v;
       ss << "NNUE evaluation        " << to_cp(v) << " (white side)\n";
   }
+#endif
 
   v = evaluate(pos);
   v = pos.side_to_move() == WHITE ? v : -v;
   ss << "Final evaluation       " << to_cp(v) << " (white side)";
+#ifdef USE_NNUE
   if (Eval::useNNUE)
      ss << " [with scaled NNUE, hybrid, ...]";
+#endif
   ss << "\n";
 
   return ss.str();

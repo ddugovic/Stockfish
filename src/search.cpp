@@ -132,7 +132,9 @@ namespace {
   uint64_t perft(Position& pos, Depth depth) {
 
     StateInfo st;
+#ifdef USE_NNUE
     ASSERT_ALIGNED(&st, Eval::NNUE::CacheLineSize);
+#endif
 
     uint64_t cnt, nodes = 0;
     const bool leaf = (depth == 2);
@@ -195,7 +197,9 @@ void MainThread::search() {
   Time.init(Limits, us, rootPos.game_ply());
   TT.new_search();
 
+#ifdef USE_NNUE
   Eval::NNUE::verify();
+#endif
 
   if (rootMoves.empty())
   {
@@ -538,7 +542,9 @@ namespace {
 
     Move pv[MAX_PLY+1], capturesSearched[32], quietsSearched[64];
     StateInfo st;
+#ifdef USE_NNUE
     ASSERT_ALIGNED(&st, Eval::NNUE::CacheLineSize);
+#endif
 
     TTEntry* tte;
     Key posKey;
@@ -714,7 +720,9 @@ namespace {
     else if (excludedMove)
     {
         // Providing the hint that this node's accumulator will be used often brings significant Elo gain (13 Elo)
+#ifdef USE_NNUE
         Eval::NNUE::hint_common_parent_position(pos);
+#endif
         eval = ss->staticEval;
     }
     else if (ss->ttHit)
@@ -723,8 +731,10 @@ namespace {
         ss->staticEval = eval = tte->eval();
         if (eval == VALUE_NONE)
             ss->staticEval = eval = evaluate(pos);
+#ifdef USE_NNUE
         else if (PvNode)
             Eval::NNUE::hint_common_parent_position(pos);
+#endif
 
         // ttValue can be used as a better position evaluation (~7 Elo)
         if (    ttValue != VALUE_NONE
@@ -887,7 +897,9 @@ namespace {
                 }
             }
 
+#ifdef USE_NNUE
         Eval::NNUE::hint_common_parent_position(pos);
+#endif
     }
 
 moves_loop: // When in check, search starts here
@@ -1416,7 +1428,9 @@ moves_loop: // When in check, search starts here
 
     Move pv[MAX_PLY+1];
     StateInfo st;
+#ifdef USE_NNUE
     ASSERT_ALIGNED(&st, Eval::NNUE::CacheLineSize);
+#endif
 
     TTEntry* tte;
     Key posKey;
@@ -1920,7 +1934,9 @@ string UCI::pv(const Position& pos, Depth depth) {
 bool RootMove::extract_ponder_from_tt(Position& pos) {
 
     StateInfo st;
+#ifdef USE_NNUE
     ASSERT_ALIGNED(&st, Eval::NNUE::CacheLineSize);
+#endif
 
     bool ttHit;
 

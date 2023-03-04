@@ -56,14 +56,27 @@ else
 endif
 
 ### Source and object files
+ifeq ($(nnue),yes)
+CXXFLAGS += -DUSE_NNUE
+endif
+ifeq (,$(filter -DUSE_NNUE,$(CXXFLAGS)))
+SRCS = benchmark.cpp bitbase.cpp bitboard.cpp endgame.cpp evaluate.cpp main.cpp \
+	material.cpp misc.cpp movegen.cpp movepick.cpp pawns.cpp position.cpp psqt.cpp \
+	search.cpp thread.cpp timeman.cpp tt.cpp uci.cpp ucioption.cpp tune.cpp syzygy/tbprobe.cpp
+else
 SRCS = benchmark.cpp bitbase.cpp bitboard.cpp endgame.cpp evaluate.cpp main.cpp \
 	material.cpp misc.cpp movegen.cpp movepick.cpp pawns.cpp position.cpp psqt.cpp \
 	search.cpp thread.cpp timeman.cpp tt.cpp uci.cpp ucioption.cpp tune.cpp syzygy/tbprobe.cpp \
 	nnue/evaluate_nnue.cpp nnue/features/half_ka_v2_hm.cpp
+endif
 
 OBJS = $(notdir $(SRCS:.cpp=.o))
 
+ifeq (,$(filter -DUSE_NNUE,$(CXXFLAGS)))
+VPATH = syzygy
+else
 VPATH = syzygy:nnue:nnue/features
+endif
 
 ### ==========================================================================
 ### Section 2. High-level Configuration
@@ -96,6 +109,7 @@ VPATH = syzygy:nnue:nnue/features
 # vnni512 = yes/no    --- -mavx512vnni       --- Use Intel Vector Neural Network Instructions 512
 # neon = yes/no       --- -DUSE_NEON         --- Use ARM SIMD architecture
 # dotprod = yes/no    --- -DUSE_NEON_DOTPROD --- Use ARM advanced SIMD Int8 dot product instructions
+# nnue = yes/no       --- -DUSE_NNUE         --- Use Effectively Updateable Neural Network
 #
 # Note that Makefile is space sensitive, so when adding new architectures
 # or modifying existing flags, you have to make sure there are no extra spaces
@@ -143,6 +157,7 @@ vnni512 = no
 neon = no
 dotprod = no
 arm_version = 0
+nnue = no
 STRIP = strip
 
 ### 2.2 Architecture specific
@@ -872,6 +887,7 @@ clean: objclean profileclean
 
 # evaluation network (nnue)
 net:
+ifneq (,$(filter -DUSE_NNUE,$(CXXFLAGS)))
 	$(eval nnuenet := $(shell grep EvalFileDefaultName evaluate.h | grep define | sed 's/.*\(nn-[a-z0-9]\{12\}.nnue\).*/\1/'))
 	@echo "Default net: $(nnuenet)"
 	$(eval nnuedownloadurl1 := https://tests.stockfishchess.org/api/nn/$(nnuenet))
@@ -905,6 +921,7 @@ net:
 	@if ! test -f "$(nnuenet)"; then \
 	    echo "Failed to download $(nnuenet)."; \
 	fi
+endif
 
 # clean binaries and objects
 objclean:
@@ -956,6 +973,7 @@ config-sanity: net
 	@echo "dotprod: '$(dotprod)'"
 	@echo "arm_version: '$(arm_version)'"
 	@echo "target_windows: '$(target_windows)'"
+	@echo "nnue: '$(nnue)'"
 	@echo ""
 	@echo "Flags:"
 	@echo "CXX: $(CXX)"
