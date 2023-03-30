@@ -18,6 +18,7 @@
 
 // header used in NNUE evaluation function
 
+#ifdef USE_NNUE
 #ifndef NNUE_EVALUATE_NNUE_H_INCLUDED
 #define NNUE_EVALUATE_NNUE_H_INCLUDED
 
@@ -66,3 +67,4 @@ namespace Stockfish::Eval::NNUE {
 }  // namespace Stockfish::Eval::NNUE
 
 #endif // #ifndef NNUE_EVALUATE_NNUE_H_INCLUDED
+#endif // #ifdef USE_NNUE

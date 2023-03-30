@@ -189,7 +189,7 @@ enum Value : int {
   // In the code, we make the assumption that these values
   // are such that non_pawn_material() can be used to uniquely
   // identify the material on the board.
-  PawnValueMg   = 126,   PawnValueEg   = 208,
+  PawnValueMg   = 250,   PawnValueEg   = 300,
   KnightValueMg = 781,   KnightValueEg = 854,
   BishopValueMg = 825,   BishopValueEg = 915,
   RookValueMg   = 1276,  RookValueEg   = 1380,
