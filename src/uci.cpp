@@ -16,6 +16,7 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <iostream>
@@ -41,7 +42,72 @@ namespace Stockfish {
 namespace {
 
   // FEN string for the initial position in standard chess
-  const char* StartFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+  const string StartFENs[SUBVARIANT_NB] = {
+  "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+#ifdef ANTI
+  "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1",
+#endif
+#ifdef ATOMIC
+  "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+#endif
+#ifdef CRAZYHOUSE
+  "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1",
+#endif
+#ifdef EXTINCTION
+  "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+#endif
+#ifdef GRID
+  "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+#endif
+#ifdef HORDE
+  "rnbqkbnr/pppppppp/8/1PP2PP1/PPPPPPPP/PPPPPPPP/PPPPPPPP/PPPPPPPP w kq - 0 1",
+#endif
+#ifdef KOTH
+  "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+#endif
+#ifdef LOSERS
+  "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+#endif
+#ifdef RACE
+  "8/8/8/8/8/8/krbnNBRK/qrbnNBRQ w - - 0 1",
+#endif
+#ifdef THREECHECK
+  "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 3+3 0 1",
+#endif
+#ifdef TWOKINGS
+  "rnbqkknr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKKNR w KQkq - 0 1",
+#endif
+#ifdef GIVEAWAY
+  "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+#endif
+#ifdef SUICIDE
+  "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1",
+#endif
+#ifdef BUGHOUSE
+  "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1",
+#endif
+#ifdef DISPLACEDGRID
+  "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+#endif
+#ifdef LOOP
+  "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1",
+#endif
+#ifdef PLACEMENT
+  "8/pppppppp/8/8/8/8/PPPPPPPP/8[KQRRBBNNkqrrbbnn] w - -",
+#endif
+#ifdef KNIGHTRELAY
+  "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+#endif
+#ifdef RELAY
+  "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+#endif
+#ifdef SLIPPEDGRID
+  "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+#endif
+#ifdef TWOKINGSSYMMETRIC
+  "rnbqkknr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKKNR w KQkq - 0 1",
+#endif
+  };
 
 
   // position() is called when the engine receives the "position" UCI command.
@@ -54,11 +120,12 @@ namespace {
     Move m;
     string token, fen;
 
-    is >> token;
+    Variant variant = UCI::variant_from_name(Options["UCI_Variant"]);
 
+    is >> token;
     if (token == "startpos")
     {
-        fen = StartFEN;
+        fen = StartFENs[variant];
         is >> token; // Consume the "moves" token, if any
     }
     else if (token == "fen")
@@ -68,7 +135,7 @@ namespace {
         return;
 
     states = StateListPtr(new std::deque<StateInfo>(1)); // Drop the old state and create a new one
-    pos.set(fen, Options["UCI_Chess960"], &states->back(), Threads.main());
+    pos.set(fen, Options["UCI_Chess960"], variant, &states->back(), Threads.main());
 
     // Parse the move list, if any
     while (is >> token && (m = UCI::to_move(pos, token)) != MOVE_NONE)
@@ -85,7 +152,7 @@ namespace {
 
     StateListPtr states(new std::deque<StateInfo>(1));
     Position p;
-    p.set(pos.fen(), Options["UCI_Chess960"], &states->back(), Threads.main());
+    p.set(pos.fen(), Options["UCI_Chess960"], pos.variant(), &states->back(), Threads.main());
 
 #ifdef USE_NNUE
     Eval::NNUE::verify();
@@ -113,7 +180,14 @@ namespace {
         value += (value.empty() ? "" : " ") + token;
 
     if (Options.count(name))
+    {
         Options[name] = value;
+        std::transform(name.begin(), name.end(), name.begin(), ::tolower);
+        if (name == "uci_variant") {
+            Variant variant = UCI::variant_from_name(value);
+            sync_cout << "info string variant " << (string)Options["UCI_Variant"] << " startpos " << StartFENs[variant] << sync_endl;
+        }
+    }
     else
         sync_cout << "No such option: " << name << sync_endl;
   }
@@ -240,7 +314,7 @@ void UCI::loop(int argc, char* argv[]) {
   string token, cmd;
   StateListPtr states(new std::deque<StateInfo>(1));
 
-  pos.set(StartFEN, false, &states->back(), Threads.main());
+  pos.set(StartFENs[CHESS_VARIANT], false, CHESS_VARIANT, &states->back(), Threads.main());
 
   for (int i = 1; i < argc; ++i)
       cmd += std::string(argv[i]) + " ";
@@ -327,7 +401,7 @@ string UCI::value(Value v) {
       ss << "cp " << (v > 0 ? 20000 - ply : -20000 + ply);
   }
   else
-      ss << "mate " << (v > 0 ? VALUE_MATE - v + 1 : -VALUE_MATE - v) / 2;
+      ss << "mate " << (v > 0 ? VALUE_MATE - v + 1 : -VALUE_MATE - v - 1) / 2;
 
   return ss.str();
 }
@@ -375,7 +449,11 @@ string UCI::move(Move m, bool chess960) {
   if (type_of(m) == CASTLING && !chess960)
       to = make_square(to > from ? FILE_G : FILE_C, rank_of(from));
 
+#ifdef CRAZYHOUSE
+  string move = ((type_of(m) == DROP) ? std::string{" PNBRQK  PNBRQK "[dropped_piece(m)], '@'} : UCI::square(from)) + UCI::square(to);
+#else
   string move = UCI::square(from) + UCI::square(to);
+#endif
 
   if (type_of(m) == PROMOTION)
       move += " pnbrqk"[promotion_type(m)];
@@ -399,4 +477,12 @@ Move UCI::to_move(const Position& pos, string& str) {
   return MOVE_NONE;
 }
 
+Variant UCI::variant_from_name(const string& str) {
+
+  for (Variant v = CHESS_VARIANT; v < SUBVARIANT_NB; ++v)
+      if (variants[v] == str)
+          return v;
+
+  return CHESS_VARIANT;
+}
 } // namespace Stockfish

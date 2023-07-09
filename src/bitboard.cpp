@@ -31,6 +31,9 @@ Bitboard LineBB[SQUARE_NB][SQUARE_NB];
 Bitboard BetweenBB[SQUARE_NB][SQUARE_NB];
 Bitboard PseudoAttacks[PIECE_TYPE_NB][SQUARE_NB];
 Bitboard PawnAttacks[COLOR_NB][SQUARE_NB];
+#ifdef GRID
+Bitboard GridBB[GRIDLAYOUT_NB][SQUARE_NB];
+#endif
 
 Magic RookMagics[SQUARE_NB];
 Magic BishopMagics[SQUARE_NB];
@@ -113,6 +116,30 @@ void Bitboards::init() {
               BetweenBB[s1][s2] |= s2;
           }
   }
+
+#ifdef GRID
+  for (Square s = SQ_A1; s <= SQ_H8; ++s)
+  {
+      GridBB[NORMAL_GRID][s]    = square_bb(s) | square_bb(Square(int(s) ^ 8)) | square_bb(Square(int(s) ^ 1)) | square_bb(Square(int(s) ^ 9));
+#ifdef DISPLACEDGRID
+      GridBB[DISPLACED_GRID][s] = square_bb(s);
+      if (!((FileABB | FileHBB) & s))
+          GridBB[DISPLACED_GRID][s] |= square_bb(Square(int((s + 1) ^ 1) - 1));
+      if (!((Rank1BB | Rank8BB) & s))
+          GridBB[DISPLACED_GRID][s] |= square_bb(Square(int((s + 8) ^ 8) - 8));
+      if (!((Rank1BB | Rank8BB | FileABB | FileHBB) & s))
+          GridBB[DISPLACED_GRID][s] |= square_bb(Square(int((s + 9) ^ 9) - 9));
+#endif
+#ifdef SLIPPEDGRID
+      GridBB[SLIPPED_GRID][s] = square_bb(s) | square_bb(Square(int(s) ^ 8));
+      if (!((FileABB | FileHBB) & s))
+      {
+          GridBB[SLIPPED_GRID][s] |= square_bb(Square(int((s + 1) ^ 1) - 1));
+          GridBB[SLIPPED_GRID][s] |= square_bb(Square(int(((s + 1) ^ 1) - 1) ^ 8));
+      }
+#endif
+  }
+#endif
 }
 
 namespace {

@@ -355,7 +355,11 @@ namespace {
     constexpr Direction Down = -Up;
     constexpr Bitboard LowRanks = (Us == WHITE ? Rank2BB | Rank3BB : Rank7BB | Rank6BB);
 
+#ifdef HORDE
+    const Square ksq = (pos.is_horde() && pos.is_horde_color(Us)) ? SQ_NONE : pos.square<KING>(Us);
+#else
     const Square ksq = pos.square<KING>(Us);
+#endif
 
     Bitboard dblAttackByPawn = pawn_double_attacks_bb<Us>(pos.pieces(Us, PAWN));
 
@@ -367,15 +371,63 @@ namespace {
     mobilityArea[Us] = ~(b | pos.pieces(Us, KING, QUEEN) | pos.blockers_for_king(Us) | pe->pawn_attacks(Them));
 
     // Initialize attackedBy[] for king and pawns
+#ifdef PLACEMENT
+    if (pos.is_placement() && pos.count_in_hand<KING>(Us))
+        attackedBy[Us][KING] = 0;
+    else
+#endif
+    switch (pos.variant())
+    {
+#ifdef ANTI
+    case ANTI_VARIANT:
+        attackedBy[Us][KING] = 0;
+        for (Bitboard kings = pos.pieces(Us, KING); kings; )
+            attackedBy[Us][KING] |= attacks_bb<KING>(pop_lsb(kings));
+    break;
+#endif
+#ifdef HORDE
+    case HORDE_VARIANT:
+        if (pos.is_horde_color(Us))
+        {
+            attackedBy[Us][KING] = 0;
+            break;
+        }
+    [[fallthrough]];
+#endif
+    default:
     attackedBy[Us][KING] = attacks_bb<KING>(ksq);
+    }
     attackedBy[Us][PAWN] = pe->pawn_attacks(Us);
     attackedBy[Us][ALL_PIECES] = attackedBy[Us][KING] | attackedBy[Us][PAWN];
     attackedBy2[Us] = dblAttackByPawn | (attackedBy[Us][KING] & attackedBy[Us][PAWN]);
 
     // Init our king safety tables
+#ifdef PLACEMENT
+    if (pos.is_placement() && pos.count_in_hand<KING>(Us))
+        kingRing[Us] = 0;
+    else
+#endif
+    switch (pos.variant())
+    {
+#ifdef ANTI
+    case ANTI_VARIANT:
+        kingRing[Us] = 0;
+    break;
+#endif
+#ifdef HORDE
+    case HORDE_VARIANT:
+        if (pos.is_horde_color(Us))
+        {
+            kingRing[Us] = 0;
+            break;
+        }
+    [[fallthrough]];
+#endif
+    default:
     Square s = make_square(std::clamp(file_of(ksq), FILE_B, FILE_G),
                            std::clamp(rank_of(ksq), RANK_2, RANK_7));
     kingRing[Us] = attacks_bb<KING>(s) | s;
+    }
 
     kingAttackersCount[Them] = popcount(kingRing[Us] & pe->pawn_attacks(Them));
     kingAttacksCount[Them] = kingAttackersWeight[Them] = 0;
@@ -430,6 +482,22 @@ namespace {
             score += BishopOnKingRing;
 
         int mob = popcount(b & mobilityArea[Us]);
+#ifdef ANTI
+        if (pos.is_anti())
+            continue;
+#endif
+#ifdef HORDE
+        if (pos.is_horde() && pos.is_horde_color(Us))
+            continue;
+#endif
+#ifdef PLACEMENT
+        if (pos.is_placement() && pos.count_in_hand<KING>(Us))
+            continue;
+#endif
+#ifdef LOSERS
+        if (pos.is_losers())
+            continue;
+#endif
         mobility[Us] += MobilityBonus[Pt - 2][mob];
 
         if constexpr (Pt == BISHOP || Pt == KNIGHT)
@@ -534,6 +602,23 @@ namespace {
 
   template<Tracing T> template<Color Us>
   Score Evaluation<T>::king() const {
+
+#ifdef ANTI
+    if (pos.is_anti())
+        return SCORE_ZERO;
+#endif
+#ifdef EXTINCTION
+    if (pos.is_extinction())
+        return SCORE_ZERO;
+#endif
+#ifdef HORDE
+    if (pos.is_horde() && pos.is_horde_color(Us))
+        return SCORE_ZERO;
+#endif
+#ifdef PLACEMENT
+    if (pos.is_placement() && pos.count_in_hand<KING>(Us))
+        return SCORE_ZERO;
+#endif
 
     constexpr Color    Them = ~Us;
     constexpr Bitboard Camp = (Us == WHITE ? AllSquares ^ Rank6BB ^ Rank7BB ^ Rank8BB
@@ -642,7 +727,6 @@ namespace {
 
     Bitboard b, weak, defended, nonPawnEnemies, stronglyProtected, safe;
     Score score = SCORE_ZERO;
-
     // Non-pawn enemies
     nonPawnEnemies = pos.pieces(Them) & ~pos.pieces(PAWN);
 
@@ -705,7 +789,11 @@ namespace {
     score += ThreatByPawnPush * popcount(b);
 
     // Bonus for threats on the next moves against enemy queen
+#ifdef CRAZYHOUSE
+    if ((pos.is_house() ? pos.count<QUEEN>(Them) - pos.count_in_hand<QUEEN>(Them) : pos.count<QUEEN>(Them)) == 1)
+#else
     if (pos.count<QUEEN>(Them) == 1)
+#endif
     {
         bool queenImbalance = pos.count<QUEEN>() == 1;
 
@@ -776,7 +864,7 @@ namespace {
         {
             int w = 5 * r - 13;
             Square blockSq = s + Up;
-
+            {
             // Adjust bonus based on the king's proximity
             bonus += make_score(0, (  king_proximity(Them, blockSq) * 19 / 4
                                     - king_proximity(Us,   blockSq) *  2) * w);
@@ -784,6 +872,7 @@ namespace {
             // If blockSq is not the queening square then consider also a second push
             if (r != RANK_7)
                 bonus -= make_score(0, king_proximity(Us, blockSq + Up) * w);
+            }
 
             // If the pawn is free to advance, then increase the bonus
             if (pos.empty(blockSq))
@@ -872,11 +961,25 @@ namespace {
   template<Tracing T>
   Value Evaluation<T>::winnable(Score score) const {
 
-    int outflanking =  distance<File>(pos.square<KING>(WHITE), pos.square<KING>(BLACK))
-                    + int(rank_of(pos.square<KING>(WHITE)) - rank_of(pos.square<KING>(BLACK)));
-
     bool pawnsOnBothFlanks =   (pos.pieces(PAWN) & QueenSide)
                             && (pos.pieces(PAWN) & KingSide);
+
+    int complexity = 0;
+#ifdef ANTI
+    if (pos.is_anti()) {} else
+#endif
+#ifdef HORDE
+    if (pos.is_horde()) {} else
+#endif
+#ifdef PLACEMENT
+    if (pos.is_placement() && (pos.count_in_hand<KING>(WHITE) || pos.count_in_hand<KING>(BLACK))) {} else
+#endif
+#ifdef LOSERS
+    if (pos.is_losers()) {} else
+#endif
+    {
+    int outflanking =  distance<File>(pos.square<KING>(WHITE), pos.square<KING>(BLACK))
+                    + int(rank_of(pos.square<KING>(WHITE)) - rank_of(pos.square<KING>(BLACK)));
 
     bool almostUnwinnable =   outflanking < 0
                            && !pawnsOnBothFlanks;
@@ -885,7 +988,7 @@ namespace {
                        || rank_of(pos.square<KING>(BLACK)) < RANK_5;
 
     // Compute the initiative bonus for the attacking side
-    int complexity =   9 * pe->passed_count()
+    complexity =   9 * pe->passed_count()
                     + 12 * pos.count<PAWN>()
                     +  9 * outflanking
                     + 21 * pawnsOnBothFlanks
@@ -893,6 +996,7 @@ namespace {
                     + 51 * !pos.non_pawn_material()
                     - 43 * almostUnwinnable
                     -110 ;
+    }
 
     Value mg = mg_value(score);
     Value eg = eg_value(score);
@@ -910,9 +1014,19 @@ namespace {
     Color strongSide = eg > VALUE_DRAW ? WHITE : BLACK;
     int sf = me->scale_factor(pos, strongSide);
 
+#ifdef ANTI
+    if (pos.is_anti()) {} else
+#endif
+#ifdef EXTINCTION
+    if (pos.is_extinction()) {} else
+#endif
+#ifdef PLACEMENT
+    if (pos.is_placement() && pos.count_in_hand<KING>(~strongSide)) {} else
+#endif
     // If scale factor is not already specific, scale up/down via general heuristics
     if (sf == SCALE_FACTOR_NORMAL)
     {
+        Square ksq;
         if (pos.opposite_bishops())
         {
             // For pure opposite colored bishops endgames use scale factor
@@ -932,7 +1046,7 @@ namespace {
                 && pos.non_pawn_material(BLACK) == RookValueMg
                 && pos.count<PAWN>(strongSide) - pos.count<PAWN>(~strongSide) <= 1
                 && bool(KingSide & pos.pieces(strongSide, PAWN)) != bool(QueenSide & pos.pieces(strongSide, PAWN))
-                && (attacks_bb<KING>(pos.square<KING>(~strongSide)) & pos.pieces(~strongSide, PAWN)))
+                && (is_ok((ksq = pos.square<KING>(~strongSide))) && attacks_bb<KING>(ksq) & pos.pieces(~strongSide, PAWN)))
             sf = 36;
         // For queen vs no queen endgames use scale factor
         // based on number of minors of side that doesn't have queen.
@@ -971,6 +1085,9 @@ namespace {
   Value Evaluation<T>::value() {
 
     assert(!pos.checkers());
+
+    if (pos.is_variant_end())
+        return pos.variant_result();
 
     int vv =  pos.count<PAWN>(WHITE) - pos.count<PAWN>(BLACK)
             + (pos.count<BISHOP>(WHITE) - pos.count<BISHOP>(BLACK)) * 3
@@ -1065,15 +1182,13 @@ Value Eval::evaluate(const Position& pos) {
   assert(!pos.checkers());
 
   Value v;
+#ifdef USE_NNUE
   Value psq = pos.psq_eg_stm();
 
   // We use the much less accurate but faster Classical eval when the NNUE
   // option is set to false. Otherwise we use the NNUE eval unless the
   // PSQ advantage is decisive. (~4 Elo at STC, 1 Elo at LTC)
-#ifndef USE_NNUE
-  bool useClassical = true;
-#else
-  bool useClassical = !useNNUE || abs(psq) > 2048;
+  bool useClassical = pos.variant() != CHESS_VARIANT || !useNNUE || abs(psq) > 2048;
 
   if (useClassical)
 #endif

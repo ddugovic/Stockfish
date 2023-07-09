@@ -21,6 +21,7 @@
 
 #include <map>
 #include <string>
+#include <vector>
 
 #include "types.h"
 
@@ -56,6 +57,7 @@ public:
   Option(OnChange = nullptr);
   Option(bool v, OnChange = nullptr);
   Option(const char* v, OnChange = nullptr);
+  Option(const char* v, const std::vector<std::string>& variants, OnChange = nullptr);
   Option(double v, int minv, int maxv, OnChange = nullptr);
   Option(const char* v, const char* cur, OnChange = nullptr);
 
@@ -70,6 +72,7 @@ private:
 
   std::string defaultValue, currentValue, type;
   int min, max;
+  std::vector<std::string> comboValues;
   size_t idx;
   OnChange on_change;
 };
@@ -82,6 +85,7 @@ std::string move(Move m, bool chess960);
 std::string pv(const Position& pos, Depth depth);
 std::string wdl(Value v, int ply);
 Move to_move(const Position& pos, std::string& str);
+Variant variant_from_name(const std::string& str);
 
 } // namespace UCI
 

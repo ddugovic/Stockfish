@@ -41,6 +41,8 @@
 #include <cstdint>
 #include <cstdlib>
 #include <algorithm>
+#include <string>
+#include <vector>
 
 #if defined(_MSC_VER)
 // Disable some silly and noisy warning from MSVC compiler
@@ -106,8 +108,154 @@ constexpr bool Is64Bit = false;
 using Key = uint64_t;
 using Bitboard = uint64_t;
 
+#if defined(CRAZYHOUSE) || defined(HORDE)
+constexpr int MAX_MOVES = 512;
+#else
 constexpr int MAX_MOVES = 256;
+#endif
 constexpr int MAX_PLY   = 246;
+
+enum Variant {
+  //main variants
+  CHESS_VARIANT,
+#ifdef ANTI
+  ANTI_VARIANT,
+#endif
+#ifdef ATOMIC
+  ATOMIC_VARIANT,
+#endif
+#ifdef CRAZYHOUSE
+  CRAZYHOUSE_VARIANT,
+#endif
+#ifdef EXTINCTION
+  EXTINCTION_VARIANT,
+#endif
+#ifdef GRID
+  GRID_VARIANT,
+#endif
+#ifdef HORDE
+  HORDE_VARIANT,
+#endif
+#ifdef KOTH
+  KOTH_VARIANT,
+#endif
+#ifdef LOSERS
+  LOSERS_VARIANT,
+#endif
+#ifdef RACE
+  RACE_VARIANT,
+#endif
+#ifdef THREECHECK
+  THREECHECK_VARIANT,
+#endif
+#ifdef TWOKINGS
+  TWOKINGS_VARIANT,
+#endif
+  VARIANT_NB,
+  LAST_VARIANT = VARIANT_NB - 1,
+  //subvariants
+#ifdef GIVEAWAY
+  GIVEAWAY_VARIANT,
+#endif
+#ifdef SUICIDE
+  SUICIDE_VARIANT,
+#endif
+#ifdef BUGHOUSE
+  BUGHOUSE_VARIANT,
+#endif
+#ifdef DISPLACEDGRID
+  DISPLACEDGRID_VARIANT,
+#endif
+#ifdef LOOP
+  LOOP_VARIANT,
+#endif
+#ifdef PLACEMENT
+  PLACEMENT_VARIANT,
+#endif
+#ifdef KNIGHTRELAY
+  KNIGHTRELAY_VARIANT,
+#endif
+#ifdef RELAY
+  RELAY_VARIANT,
+#endif
+#ifdef SLIPPEDGRID
+  SLIPPEDGRID_VARIANT,
+#endif
+#ifdef TWOKINGSSYMMETRIC
+  TWOKINGSSYMMETRIC_VARIANT,
+#endif
+  SUBVARIANT_NB,
+};
+
+//static const constexpr char* variants[] doesn't play nicely with uci.h
+static std::vector<std::string> variants = {
+//main variants
+"chess",
+#ifdef ANTI
+"antichess",
+#endif
+#ifdef ATOMIC
+"atomic",
+#endif
+#ifdef CRAZYHOUSE
+"crazyhouse",
+#endif
+#ifdef EXTINCTION
+"extinction",
+#endif
+#ifdef GRID
+"grid",
+#endif
+#ifdef HORDE
+"horde",
+#endif
+#ifdef KOTH
+"kingofthehill",
+#endif
+#ifdef LOSERS
+"losers",
+#endif
+#ifdef RACE
+"racingkings",
+#endif
+#ifdef THREECHECK
+"3check",
+#endif
+#ifdef TWOKINGS
+"twokings",
+#endif
+//subvariants
+#ifdef GIVEAWAY
+"giveaway",
+#endif
+#ifdef SUICIDE
+"suicide",
+#endif
+#ifdef BUGHOUSE
+"bughouse",
+#endif
+#ifdef DISPLACEDGRID
+"displacedgrid",
+#endif
+#ifdef LOOP
+"loop",
+#endif
+#ifdef PLACEMENT
+"placement",
+#endif
+#ifdef KNIGHTRELAY
+"knightrelay",
+#endif
+#ifdef RELAY
+"relay",
+#endif
+#ifdef SLIPPEDGRID
+"slippedgrid",
+#endif
+#ifdef TWOKINGSSYMMETRIC
+"twokingssymmetric",
+#endif
+};
 
 /// A move needs 16 bits to be stored
 ///
@@ -130,7 +278,17 @@ enum MoveType {
   NORMAL,
   PROMOTION = 1 << 14,
   EN_PASSANT = 2 << 14,
-  CASTLING  = 3 << 14
+  CASTLING  = 3 << 14,
+  // special moves use promotion piece type bits as flags
+#if defined(ANTI) || defined(CRAZYHOUSE) || defined(EXTINCTION)
+  SPECIAL = EN_PASSANT,
+#endif
+#ifdef CRAZYHOUSE
+  DROP = 1 << 12,
+#endif
+#if defined(ANTI) || defined(EXTINCTION)
+  KING_PROMOTION = 2 << 12, // not used as an actual move type
+#endif
 };
 
 enum Color {
@@ -152,6 +310,25 @@ enum CastlingRights {
 
   CASTLING_RIGHT_NB = 16
 };
+
+#ifdef GRID
+enum GridLayout {
+  NORMAL_GRID,
+#ifdef DISPLACEDGRID
+  DISPLACED_GRID,
+#endif
+#ifdef SLIPPEDGRID
+  SLIPPED_GRID,
+#endif
+  GRIDLAYOUT_NB
+};
+#endif
+
+#ifdef THREECHECK
+enum CheckCount : int {
+  CHECKS_0 = 0, CHECKS_1 = 1, CHECKS_2 = 2, CHECKS_3 = 3, CHECKS_NB = 4
+};
+#endif
 
 enum Phase {
   PHASE_ENDGAME,
@@ -327,6 +504,10 @@ inline T& operator/=(T& d, int i) { return d = T(int(d) / i); }
 ENABLE_FULL_OPERATORS_ON(Value)
 ENABLE_FULL_OPERATORS_ON(Direction)
 
+ENABLE_INCR_OPERATORS_ON(Variant)
+#ifdef THREECHECK
+ENABLE_INCR_OPERATORS_ON(CheckCount)
+#endif
 ENABLE_INCR_OPERATORS_ON(Piece)
 ENABLE_INCR_OPERATORS_ON(PieceType)
 ENABLE_INCR_OPERATORS_ON(Square)
@@ -448,8 +629,14 @@ constexpr Direction pawn_push(Color c) {
   return c == WHITE ? NORTH : SOUTH;
 }
 
-constexpr Square from_sq(Move m) {
+inline MoveType type_of(Move m); // forward declaration
+
+inline Square from_sq(Move m) {
   assert(is_ok(m));
+#ifdef CRAZYHOUSE
+  if (type_of(m) == DROP)
+      return SQ_NONE;
+#endif
   return Square((m >> 6) & 0x3F);
 }
 
@@ -458,15 +645,36 @@ constexpr Square to_sq(Move m) {
   return Square(m & 0x3F);
 }
 
-constexpr int from_to(Move m) {
+inline int from_to(Move m) {
+#ifdef CRAZYHOUSE
+  if (type_of(m) == DROP)
+      return (to_sq(m) << 6) + to_sq(m);
+#endif
   return m & 0xFFF;
 }
 
-constexpr MoveType type_of(Move m) {
+inline MoveType type_of(Move m) {
+#if defined(ANTI) || defined(CRAZYHOUSE) || defined(EXTINCTION)
+  if ((m & (3 << 14)) == SPECIAL && (m & (3 << 12)))
+  {
+#ifdef CRAZYHOUSE
+      if ((m & (3 << 12)) == DROP)
+          return DROP;
+#endif
+#if defined(ANTI) || defined(EXTINCTION)
+      if ((m & (3 << 12)) == KING_PROMOTION)
+          return PROMOTION;
+#endif
+  }
+#endif
   return MoveType(m & (3 << 14));
 }
 
-constexpr PieceType promotion_type(Move m) {
+inline PieceType promotion_type(Move m) {
+#if defined(ANTI) || defined(EXTINCTION)
+  if ((m & (3 << 14)) == SPECIAL && (m & (3 << 12)) == KING_PROMOTION)
+      return KING;
+#endif
   return PieceType(((m >> 12) & 3) + KNIGHT);
 }
 
@@ -475,15 +683,79 @@ constexpr Move make_move(Square from, Square to) {
 }
 
 template<MoveType T>
-constexpr Move make(Square from, Square to, PieceType pt = KNIGHT) {
+inline Move make(Square from, Square to, PieceType pt = KNIGHT) {
+#if defined(ANTI) || defined(EXTINCTION)
+  if (pt == KING)
+      return Move(SPECIAL + KING_PROMOTION + (from << 6) + to);
+#endif
   return Move(T + ((pt - KNIGHT) << 12) + (from << 6) + to);
 }
+
+#ifdef CRAZYHOUSE
+constexpr Move make_drop(Square to, Piece pc) {
+  return Move(SPECIAL + DROP + (pc << 6) + to);
+}
+
+constexpr Piece dropped_piece(Move m) {
+  return Piece((m >> 6) & 0x0F);
+}
+#endif
 
 /// Based on a congruential pseudo random number generator
 constexpr Key make_key(uint64_t seed) {
   return seed * 6364136223846793005ULL + 1442695040888963407ULL;
 }
 
+inline Variant main_variant(Variant v) {
+  if (v < VARIANT_NB)
+      return v;
+  switch(v)
+  {
+#ifdef GIVEAWAY
+  case GIVEAWAY_VARIANT:
+      return ANTI_VARIANT;
+#endif
+#ifdef SUICIDE
+  case SUICIDE_VARIANT:
+      return ANTI_VARIANT;
+#endif
+#ifdef BUGHOUSE
+  case BUGHOUSE_VARIANT:
+      return CRAZYHOUSE_VARIANT;
+#endif
+#ifdef DISPLACEDGRID
+  case DISPLACEDGRID_VARIANT:
+      return GRID_VARIANT;
+#endif
+#ifdef LOOP
+  case LOOP_VARIANT:
+      return CRAZYHOUSE_VARIANT;
+#endif
+#ifdef PLACEMENT
+  case PLACEMENT_VARIANT:
+      return CRAZYHOUSE_VARIANT;
+#endif
+#ifdef KNIGHTRELAY
+  case KNIGHTRELAY_VARIANT:
+      return CHESS_VARIANT;
+#endif
+#ifdef RELAY
+  case RELAY_VARIANT:
+      return CHESS_VARIANT;
+#endif
+#ifdef SLIPPEDGRID
+  case SLIPPEDGRID_VARIANT:
+      return GRID_VARIANT;
+#endif
+#ifdef TWOKINGSSYMMETRIC
+  case TWOKINGSSYMMETRIC_VARIANT:
+      return TWOKINGS_VARIANT;
+#endif
+  default:
+      assert(false);
+      return CHESS_VARIANT; // Silence a warning
+  }
+}
 } // namespace Stockfish
 
 #endif // #ifndef TYPES_H_INCLUDED

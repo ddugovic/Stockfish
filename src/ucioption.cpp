@@ -68,11 +68,12 @@ void init(OptionsMap& o) {
   o["Clear Hash"]            << Option(on_clear_hash);
   o["Ponder"]                << Option(false);
   o["MultiPV"]               << Option(1, 1, 500);
-  o["Skill Level"]           << Option(20, 0, 20);
+  o["Skill Level"]           << Option(20, -20, 20);
   o["Move Overhead"]         << Option(10, 0, 5000);
   o["Slow Mover"]            << Option(100, 10, 1000);
   o["nodestime"]             << Option(0, 0, 10000);
   o["UCI_Chess960"]          << Option(false);
+  o["UCI_Variant"]           << Option(variants.front().c_str(), variants);
   o["UCI_AnalyseMode"]       << Option(false);
   o["UCI_LimitStrength"]     << Option(false);
   o["UCI_Elo"]               << Option(1320, 1320, 3190);
@@ -103,6 +104,10 @@ std::ostream& operator<<(std::ostream& os, const OptionsMap& om) {
               if (o.type == "string" || o.type == "check" || o.type == "combo")
                   os << " default " << o.defaultValue;
 
+              if (o.type == "combo")
+                  for (string value : o.comboValues)
+                      os << " var " << value;
+
               if (o.type == "spin")
                   os << " default " << int(stof(o.defaultValue))
                      << " min "     << o.min
@@ -118,6 +123,9 @@ std::ostream& operator<<(std::ostream& os, const OptionsMap& om) {
 /// Option class constructors and conversion operators
 
 Option::Option(const char* v, OnChange f) : type("string"), min(0), max(0), on_change(f)
+{ defaultValue = currentValue = v; }
+
+Option::Option(const char* v, const std::vector<std::string>& values, OnChange f) : type("combo"), min(0), max(0), comboValues(values), on_change(f)
 { defaultValue = currentValue = v; }
 
 Option::Option(bool v, OnChange f) : type("check"), min(0), max(0), on_change(f)
@@ -138,7 +146,7 @@ Option::operator int() const {
 }
 
 Option::operator std::string() const {
-  assert(type == "string");
+  assert(type == "string" || type == "combo");
   return currentValue;
 }
 
@@ -180,6 +188,8 @@ Option& Option::operator=(const string& v) {
       std::istringstream ss(defaultValue);
       while (ss >> token)
           comboMap[token] << Option();
+      for (auto &value : comboValues)
+          comboMap[value] << Option();
       if (!comboMap.count(v) || v == "var")
           return *this;
   }

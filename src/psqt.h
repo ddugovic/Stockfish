@@ -27,7 +27,11 @@
 namespace Stockfish::PSQT
 {
 
+#ifdef CRAZYHOUSE
+extern Score psq[PIECE_NB][SQUARE_NB+1];
+#else
 extern Score psq[PIECE_NB][SQUARE_NB];
+#endif
 
 // Fill psqt array from a set of internally linked parameters
 void init();

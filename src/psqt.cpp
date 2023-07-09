@@ -105,7 +105,11 @@ constexpr Score PBonus[RANK_NB][FILE_NB] =
 namespace PSQT
 {
 
+#ifdef CRAZYHOUSE
+Score psq[PIECE_NB][SQUARE_NB+1];
+#else
 Score psq[PIECE_NB][SQUARE_NB];
+#endif
 
 // PSQT::init() initializes piece-square tables: the white halves of the tables are
 // copied from Bonus[] and PBonus[], adding the piece value, then the black halves of
@@ -123,6 +127,10 @@ void init() {
                                                  : Bonus[pc][rank_of(s)][f]);
       psq[~pc][flip_rank(s)] = -psq[pc][s];
     }
+#ifdef CRAZYHOUSE
+    psq[ pc][SQ_NONE] = score;
+    psq[~pc][SQ_NONE] = -psq[pc][SQ_NONE];
+#endif
   }
 }
 

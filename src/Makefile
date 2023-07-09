@@ -57,17 +57,15 @@ endif
 
 ### Source and object files
 ifeq ($(nnue),yes)
-CXXFLAGS += -DUSE_NNUE
-endif
-ifeq (,$(filter -DUSE_NNUE,$(CXXFLAGS)))
-SRCS = benchmark.cpp bitbase.cpp bitboard.cpp endgame.cpp evaluate.cpp main.cpp \
-	material.cpp misc.cpp movegen.cpp movepick.cpp pawns.cpp position.cpp psqt.cpp \
-	search.cpp thread.cpp timeman.cpp tt.cpp uci.cpp ucioption.cpp tune.cpp syzygy/tbprobe.cpp
+	CXXFLAGS += -DUSE_NNUE
+	SRCS = benchmark.cpp bitbase.cpp bitboard.cpp endgame.cpp evaluate.cpp main.cpp \
+		material.cpp misc.cpp movegen.cpp movepick.cpp pawns.cpp position.cpp psqt.cpp \
+		search.cpp thread.cpp timeman.cpp tt.cpp uci.cpp ucioption.cpp tune.cpp syzygy/tbprobe.cpp \
+		nnue/evaluate_nnue.cpp nnue/features/half_ka_v2_hm.cpp
 else
-SRCS = benchmark.cpp bitbase.cpp bitboard.cpp endgame.cpp evaluate.cpp main.cpp \
-	material.cpp misc.cpp movegen.cpp movepick.cpp pawns.cpp position.cpp psqt.cpp \
-	search.cpp thread.cpp timeman.cpp tt.cpp uci.cpp ucioption.cpp tune.cpp syzygy/tbprobe.cpp \
-	nnue/evaluate_nnue.cpp nnue/features/half_ka_v2_hm.cpp
+	SRCS = benchmark.cpp bitbase.cpp bitboard.cpp endgame.cpp evaluate.cpp main.cpp \
+		material.cpp misc.cpp movegen.cpp movepick.cpp pawns.cpp position.cpp psqt.cpp \
+		search.cpp thread.cpp timeman.cpp tt.cpp uci.cpp ucioption.cpp tune.cpp syzygy/tbprobe.cpp
 endif
 
 OBJS = $(notdir $(SRCS:.cpp=.o))
@@ -157,7 +155,6 @@ vnni512 = no
 neon = no
 dotprod = no
 arm_version = 0
-nnue = no
 STRIP = strip
 
 ### 2.2 Architecture specific
@@ -564,6 +561,62 @@ ifneq ($(comp),mingw)
 endif
 
 ### 3.2.1 Debugging
+CXXFLAGS += -DANTI -DATOMIC -DBUGHOUSE -DCRAZYHOUSE -DDISPLACEDGRID -DEXTINCTION -DGIVEAWAY -DGRID -DHORDE -DKNIGHTRELAY -DKOTH -DLOOP -DLOSERS -DPLACEMENT -DRACE -DRELAY -DSLIPPEDGRID -DSUICIDE -DTHREECHECK -DTWOKINGS -DTWOKINGSSYMMETRIC
+
+ifneq (,$(filter -DBUGHOUSE,$(CXXFLAGS)))
+	ifeq (,$(filter -DCRAZYHOUSE,$(CXXFLAGS)))
+		$(error Crazyhouse (-DCRAZYHOUSE) is required for subvariant bughouse chess)
+	endif
+endif
+
+ifneq (,$(filter -DDISPLACEDGRID,$(CXXFLAGS)))
+	ifeq (,$(filter -DGRID,$(CXXFLAGS)))
+		$(error Grid (-GRID) is required for subvariant displaced grid)
+	endif
+endif
+
+ifneq (,$(filter -DLOOP,$(CXXFLAGS)))
+	ifeq (,$(filter -DCRAZYHOUSE,$(CXXFLAGS)))
+		$(error Crazyhouse (-DCRAZYHOUSE) is required for subvariant loop chess)
+	endif
+endif
+
+ifneq (,$(filter -DPLACEMENT,$(CXXFLAGS)))
+	ifeq (,$(filter -DCRAZYHOUSE,$(CXXFLAGS)))
+		$(error Crazyhouse (-DCRAZYHOUSE) is required for subvariant placement chess)
+	endif
+endif
+
+ifneq (,$(filter -DSLIPPEDGRID,$(CXXFLAGS)))
+	ifeq (,$(filter -DGRID,$(CXXFLAGS)))
+		$(error Grid (-GRID) is required for subvariant slipped grid)
+	endif
+endif
+
+ifneq (,$(filter -DGIVEAWAY,$(CXXFLAGS)))
+	ifeq (,$(filter -DANTI,$(CXXFLAGS)))
+		$(error Antichess (-DANTI) is required for subvariant giveaway chess)
+	endif
+endif
+
+ifneq (,$(filter -DSUICIDE,$(CXXFLAGS)))
+	ifeq (,$(filter -DANTI,$(CXXFLAGS)))
+		$(error Antichess (-DANTI) is required for subvariant suicide chess)
+	endif
+endif
+
+ifneq (,$(filter -DKNIGHTRELAY,$(CXXFLAGS)))
+	ifeq (,$(filter -DRELAY,$(CXXFLAGS)))
+		$(error Relay (-DRELAY) is required for subvariant knight-relay)
+	endif
+endif
+
+ifneq (,$(filter -DTWOKINGSSYMMETRIC,$(CXXFLAGS)))
+	ifeq (,$(filter -DTWOKINGS,$(CXXFLAGS)))
+		$(error Twokings (-DTWOKINGS) is required for subvariant twokingssymmetric)
+	endif
+endif
+
 ifeq ($(debug),no)
 	CXXFLAGS += -DNDEBUG
 else

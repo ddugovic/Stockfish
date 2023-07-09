@@ -48,6 +48,9 @@ struct StateInfo {
   int    castlingRights;
   int    rule50;
   int    pliesFromNull;
+#ifdef THREECHECK
+  CheckCount checksGiven[COLOR_NB];
+#endif
   Square epSquare;
 
   // Not copied when making a move (will be recomputed anyhow)
@@ -59,9 +62,16 @@ struct StateInfo {
   Bitboard   checkSquares[PIECE_TYPE_NB];
   Piece      capturedPiece;
   int        repetition;
+#ifdef ATOMIC
+  Bitboard   blastByTypeBB[PIECE_TYPE_NB];
+  Bitboard   blastByColorBB[COLOR_NB];
+#endif
+#ifdef CRAZYHOUSE
+  bool       capturedpromoted;
+#endif
 
-#ifdef USE_NNUE
   // Used by NNUE
+#ifdef USE_NNUE
   Eval::NNUE::Accumulator accumulator;
   DirtyPiece dirtyPiece;
 #endif
@@ -90,8 +100,8 @@ public:
   Position& operator=(const Position&) = delete;
 
   // FEN string input/output
-  Position& set(const std::string& fenStr, bool isChess960, StateInfo* si, Thread* th);
-  Position& set(const std::string& code, Color c, StateInfo* si);
+  Position& set(const std::string& fenStr, bool isChess960, Variant v, StateInfo* si, Thread* th);
+  Position& set(const std::string& code, Color c, StateInfo* si, Variant v = CHESS_VARIANT);
   std::string fen() const;
 
   // Position representation
@@ -111,9 +121,16 @@ public:
   CastlingRights castling_rights(Color c) const;
   bool can_castle(CastlingRights cr) const;
   bool castling_impeded(CastlingRights cr) const;
+#if defined(GIVEAWAY) || defined(EXTINCTION) || defined(TWOKINGS)
+  Square castling_king_square(Color c) const;
+#endif
   Square castling_rook_square(CastlingRights cr) const;
 
   // Checking
+#ifdef ATOMIC
+  bool kings_adjacent() const;
+  bool kings_adjacent(Move m) const;
+#endif
   Bitboard checkers() const;
   Bitboard blockers_for_king(Color c) const;
   Bitboard check_squares(PieceType pt) const;
@@ -122,6 +139,14 @@ public:
   // Attacks to/from a given square
   Bitboard attackers_to(Square s) const;
   Bitboard attackers_to(Square s, Bitboard occupied) const;
+#ifdef RELAY
+  template<PieceType, PieceType> Bitboard relayed_attackers_to(Square s, Color c) const;
+  template<PieceType, PieceType> Bitboard relayed_attackers_to(Square s, Color c, Bitboard occupied) const;
+#endif
+#ifdef ATOMIC
+  Bitboard slider_attackers_to(Square s) const;
+  Bitboard slider_attackers_to(Square s, Bitboard occupied) const;
+#endif
   Bitboard slider_blockers(Bitboard sliders, Square s, Bitboard& pinners) const;
   template<PieceType Pt> Bitboard attacks_by(Color c) const;
 
@@ -147,6 +172,12 @@ public:
   void undo_null_move();
 
   // Static Exchange Evaluation
+#ifdef ATOMIC
+  template<Variant V>
+  Value see(Move m) const;
+  template<Variant V>
+  Value see(Move m, PieceType nextVictim, Square s) const;
+#endif
   bool see_ge(Move m, Value threshold = VALUE_ZERO) const;
   bool see_ge(Move m, Bitboard& occupied, Value threshold = VALUE_ZERO) const;
 
@@ -160,6 +191,109 @@ public:
   Color side_to_move() const;
   int game_ply() const;
   bool is_chess960() const;
+  Variant variant() const;
+  Variant subvariant() const;
+  bool is_variant_end() const;
+  Value variant_result(int ply = 0, Value draw_value = VALUE_DRAW) const;
+  Value checkmate_value(int ply = 0) const;
+  Value stalemate_value(int ply = 0, Value draw_value = VALUE_DRAW) const;
+#ifdef ATOMIC
+  bool is_atomic() const;
+  bool is_atomic_win() const;
+  bool is_atomic_loss() const;
+#endif
+#ifdef HORDE
+  bool is_horde() const;
+  bool is_horde_color(Color c) const;
+  bool is_horde_loss() const;
+#endif
+#ifdef CRAZYHOUSE
+  bool is_house() const;
+  template<PieceType Pt> int count_in_hand(Color c) const;
+  template<PieceType Pt> int count_in_hand() const;
+  void add_to_hand(Color c, PieceType pt);
+  void remove_from_hand(Color c, PieceType pt);
+  bool is_promoted(Square s) const;
+  void drop_piece(Piece pc, Square s);
+  void undrop_piece(Piece pc, Square s);
+#endif
+#ifdef BUGHOUSE
+  bool is_bughouse() const;
+#endif
+#ifdef LOOP
+  bool is_loop() const;
+#endif
+#ifdef PLACEMENT
+  bool is_placement() const;
+#endif
+#ifdef KNIGHTRELAY
+  bool is_knight_relay() const;
+#endif
+#ifdef RELAY
+  bool is_relay() const;
+#endif
+#ifdef EXTINCTION
+  bool is_extinction() const;
+  bool is_extinction_win() const;
+  bool is_extinction_loss() const;
+#endif
+#ifdef GRID
+  bool is_grid() const;
+  GridLayout grid_layout() const;
+  Bitboard grid_bb(Square s) const;
+#endif
+#ifdef DISPLACEDGRID
+  bool is_displaced_grid() const;
+#endif
+#ifdef SLIPPEDGRID
+  bool is_slipped_grid() const;
+#endif
+#ifdef KOTH
+  bool is_koth() const;
+  bool is_koth_win() const;
+  bool is_koth_loss() const;
+#endif
+#ifdef LOSERS
+  bool is_losers() const;
+  bool is_losers_win() const;
+  bool is_losers_loss() const;
+  bool can_capture_losers() const;
+#endif
+#ifdef RACE
+  bool is_race() const;
+  bool is_race_win() const;
+  bool is_race_draw() const;
+  bool is_race_loss() const;
+#endif
+#ifdef THREECHECK
+  bool is_three_check() const;
+  bool is_three_check_win() const;
+  bool is_three_check_loss() const;
+  int checks_count() const;
+  CheckCount checks_given(Color c) const;
+#endif
+#ifdef TWOKINGS
+  bool is_two_kings() const;
+  Square royal_king(Color c) const;
+  Square royal_king(Color c, Bitboard kings) const;
+#endif
+#ifdef TWOKINGSSYMMETRIC
+  bool is_two_kings_symmetric() const;
+#endif
+#ifdef ANTI
+  bool is_anti() const;
+  bool is_anti_win() const;
+  bool is_anti_loss() const;
+#endif
+#if defined(ANTI) || defined(LOSERS)
+  bool can_capture() const;
+#endif
+#ifdef GIVEAWAY
+  bool is_giveaway() const;
+#endif
+#ifdef SUICIDE
+  bool is_suicide() const;
+#endif
   Thread* this_thread() const;
   bool is_draw(int ply) const;
   bool has_game_cycle(int ply) const;
@@ -182,7 +316,7 @@ public:
 
 private:
   // Initialization helpers (used while setting up a position)
-  void set_castling_right(Color c, Square rfrom);
+  void set_castling_right(Color c, Square kfrom, Square rfrom);
   void set_state() const;
   void set_check_info() const;
 
@@ -198,7 +332,14 @@ private:
   Bitboard byTypeBB[PIECE_TYPE_NB];
   Bitboard byColorBB[COLOR_NB];
   int pieceCount[PIECE_NB];
+#ifdef CRAZYHOUSE
+  int pieceCountInHand[COLOR_NB][PIECE_TYPE_NB];
+  Bitboard promotedPieces;
+#endif
   int castlingRightsMask[SQUARE_NB];
+#if defined(GIVEAWAY) || defined(EXTINCTION) || defined(TWOKINGS)
+  Square castlingKingSquare[COLOR_NB];
+#endif
   Square castlingRookSquare[CASTLING_RIGHT_NB];
   Bitboard castlingPath[CASTLING_RIGHT_NB];
   Thread* thisThread;
@@ -207,6 +348,8 @@ private:
   Color sideToMove;
   Score psq;
   bool chess960;
+  Variant var;
+  Variant subvar;
 };
 
 std::ostream& operator<<(std::ostream& os, const Position& pos);
@@ -225,6 +368,10 @@ inline bool Position::empty(Square s) const {
 }
 
 inline Piece Position::moved_piece(Move m) const {
+#ifdef CRAZYHOUSE
+  if (type_of(m) == DROP)
+      return dropped_piece(m);
+#endif
   return piece_on(from_sq(m));
 }
 
@@ -247,17 +394,111 @@ inline Bitboard Position::pieces(Color c, PieceTypes... pts) const {
 }
 
 template<PieceType Pt> inline int Position::count(Color c) const {
+#ifdef CRAZYHOUSE
+  if (is_house())
+      return pieceCount[make_piece(c, Pt)] + count_in_hand<Pt>(c);
+#endif
   return pieceCount[make_piece(c, Pt)];
 }
 
 template<PieceType Pt> inline int Position::count() const {
+#ifdef CRAZYHOUSE
+  if (is_house())
+      return  count<Pt>(WHITE) + count_in_hand<Pt>(WHITE)
+            + count<Pt>(BLACK) + count_in_hand<Pt>(BLACK);
+#endif
   return count<Pt>(WHITE) + count<Pt>(BLACK);
 }
 
 template<PieceType Pt> inline Square Position::square(Color c) const {
+  switch (var)
+  {
+#ifdef ANTI
+  case ANTI_VARIANT: // There may be zero, one, or multiple kings
+      if (count<Pt>(c) == 0)
+          return SQ_NONE;
+      assert(count<Pt>(c) >= 1);
+  break;
+#endif
+#ifdef CRAZYHOUSE
+  case CRAZYHOUSE_VARIANT:
+#ifdef PLACEMENT
+      if (is_placement() && pieceCount[make_piece(c, Pt)] == 0)
+          return SQ_NONE;
+#endif
+      assert(pieceCount[make_piece(c, Pt)] == 1);
+  break;
+#endif
+#ifdef EXTINCTION
+  case EXTINCTION_VARIANT:
+      assert(count<Pt>(c) >= 1);
+  break; // return the first king's square
+#endif
+#ifdef TWOKINGS
+  case TWOKINGS_VARIANT:
+      if (Pt == KING && count<Pt>(c) > 1)
+          return royal_king(c);
+  [[fallthrough]];
+#endif
+  default:
   assert(count<Pt>(c) == 1);
+  }
   return lsb(pieces(c, Pt));
 }
+
+#ifdef THREECHECK
+inline bool Position::is_three_check() const {
+  return var == THREECHECK_VARIANT;
+}
+
+inline bool Position::is_three_check_win() const {
+  return st->checksGiven[sideToMove] == CHECKS_3;
+}
+
+inline bool Position::is_three_check_loss() const {
+  return st->checksGiven[~sideToMove] == CHECKS_3;
+}
+
+inline int Position::checks_count() const {
+  return st->checksGiven[WHITE] + st->checksGiven[BLACK];
+}
+
+inline CheckCount Position::checks_given(Color c) const {
+  return st->checksGiven[c];
+}
+#endif
+
+#ifdef TWOKINGS
+inline bool Position::is_two_kings() const {
+  return var == TWOKINGS_VARIANT;
+}
+
+inline Square Position::royal_king(Color c) const {
+  return royal_king(c, pieces(c, KING));
+}
+
+inline Square Position::royal_king(Color c, Bitboard kings) const {
+  assert(kings);
+  // Find the royal king
+  for (File f = FILE_A; f <= FILE_H; ++f)
+  {
+      if (kings & file_bb(f))
+#ifdef TWOKINGSSYMMETRIC
+          return backmost_sq(is_two_kings_symmetric() ? c : WHITE, kings & file_bb(f));
+#else
+          return backmost_sq(WHITE, kings & file_bb(f));
+#endif
+  }
+  assert(false);
+  return c == WHITE ? SQ_NONE : SQ_NONE; // silence two warnings
+}
+#endif
+
+#ifdef TWOKINGSSYMMETRIC
+inline bool Position::is_two_kings_symmetric() const {
+  return subvar == TWOKINGSSYMMETRIC_VARIANT;
+}
+#endif
 
 inline Square Position::ep_square() const {
   return st->epSquare;
@@ -281,6 +522,12 @@ inline bool Position::castling_impeded(CastlingRights cr) const {
   return pieces() & castlingPath[cr];
 }
 
+#if defined(GIVEAWAY) || defined(EXTINCTION) || defined(TWOKINGS)
+inline Square Position::castling_king_square(Color c) const {
+  return castlingKingSquare[c];
+}
+#endif
+
 inline Square Position::castling_rook_square(CastlingRights cr) const {
   assert(cr == WHITE_OO || cr == WHITE_OOO || cr == BLACK_OO || cr == BLACK_OOO);
 
@@ -290,6 +537,45 @@ inline Square Position::castling_rook_square(CastlingRights cr) const {
 inline Bitboard Position::attackers_to(Square s) const {
   return attackers_to(s, pieces());
 }
+
+#ifdef RELAY
+template<PieceType PtMin, PieceType PtMax>
+inline Bitboard Position::relayed_attackers_to(Square s, Color c) const {
+  return relayed_attackers_to<PtMin, PtMax>(s, c, pieces());
+}
+#endif
+#ifdef ATOMIC
+inline Bitboard Position::slider_attackers_to(Square s) const {
+  return slider_attackers_to(s, pieces());
+}
+
+inline bool Position::kings_adjacent() const {
+  return adjacent_squares_bb(byTypeBB[KING]) & byTypeBB[KING];
+}
+
+inline bool Position::kings_adjacent(Move m) const {
+  // Adjacent kings move validation is only relevant for atomic chess
+  // Mingw GCC suddenly started reporting a warning on unchanged code
+  // which cannot be easily changed (e.g. adding "Variant V" generics)
+  // without potentially conflicting with upstream patches
+  assert(is_atomic());
+#ifdef CRAZYHOUSE
+  // Silence Mingw GCC warning -Werror=array-bounds
+  // Somehow upstream repository isn't prone to this same false warning
+  Square from = from_sq(m);
+  if (type_of(m) == DROP || from == SQ_NONE || type_of(piece_on(from)) != KING)
+      return kings_adjacent();
+#else
+  if (type_of(moved_piece(m)) != KING)
+      return kings_adjacent();
+#endif
+  Square to = to_sq(m);
+  if (type_of(m) == CASTLING)
+      to = relative_square(sideToMove, to > from_sq(m) ? SQ_G1 : SQ_C1);
+
+  return adjacent_squares_bb(pieces(~sideToMove, KING)) & to;
+}
+#endif
 
 template<PieceType Pt>
 inline Bitboard Position::attacks_by(Color c) const {
@@ -324,6 +610,10 @@ inline Bitboard Position::check_squares(PieceType pt) const {
 }
 
 inline bool Position::pawn_passed(Color c, Square s) const {
+#ifdef HORDE
+  if (is_horde() && is_horde_color(c))
+      return !(pieces(~c, PAWN) & forward_file_bb(c, s));
+#endif
   return !(pieces(~c, PAWN) & passed_pawn_span(c, s));
 }
 
@@ -375,13 +665,499 @@ inline int Position::rule50_count() const {
 }
 
 inline bool Position::opposite_bishops() const {
-  return   count<BISHOP>(WHITE) == 1
-        && count<BISHOP>(BLACK) == 1
+  return   pieceCount[make_piece(WHITE, BISHOP)] == 1
+        && pieceCount[make_piece(BLACK, BISHOP)] == 1
         && opposite_colors(square<BISHOP>(WHITE), square<BISHOP>(BLACK));
 }
 
+#ifdef ATOMIC
+template<Variant V>
+Value Position::see(Move m) const {
+  return see<V>(m, type_of(moved_piece(m)), to_sq(m));
+}
+
+inline bool Position::is_atomic() const {
+  return var == ATOMIC_VARIANT;
+}
+
+// Loss if king is captured (Atomic)
+inline bool Position::is_atomic_win() const {
+  return count<KING>(~sideToMove) == 0;
+}
+
+// Loss if king is captured (Atomic)
+inline bool Position::is_atomic_loss() const {
+  return count<KING>(sideToMove) == 0;
+}
+#endif
+
+#ifdef EXTINCTION
+inline bool Position::is_extinction() const {
+  return var == EXTINCTION_VARIANT;
+}
+
+inline bool Position::is_extinction_win() const {
+  return !(   count<  KING>(~sideToMove) && count< QUEEN>(~sideToMove) && count<ROOK>(~sideToMove)
+           && count<BISHOP>(~sideToMove) && count<KNIGHT>(~sideToMove) && count<PAWN>(~sideToMove));
+}
+
+inline bool Position::is_extinction_loss() const {
+  return !(   count<  KING>(sideToMove) && count< QUEEN>(sideToMove) && count<ROOK>(sideToMove)
+           && count<BISHOP>(sideToMove) && count<KNIGHT>(sideToMove) && count<PAWN>(sideToMove));
+}
+#endif
+
+#ifdef GRID
+inline bool Position::is_grid() const {
+  return var == GRID_VARIANT;
+}
+
+inline GridLayout Position::grid_layout() const {
+  assert(var == GRID_VARIANT);
+  switch (subvar)
+  {
+  case GRID_VARIANT:
+      return NORMAL_GRID;
+#ifdef DISPLACEDGRID
+  case DISPLACEDGRID_VARIANT:
+      return DISPLACED_GRID;
+#endif
+#ifdef SLIPPEDGRID
+  case SLIPPEDGRID_VARIANT:
+      return SLIPPED_GRID;
+#endif
+  default:
+      assert(false);
+      return NORMAL_GRID;
+  }
+}
+
+inline Bitboard Position::grid_bb(Square s) const {
+  return GridBB[grid_layout()][s];
+}
+#endif
+
+#ifdef DISPLACEDGRID
+inline bool Position::is_displaced_grid() const {
+  return subvar == DISPLACEDGRID_VARIANT;
+}
+#endif
+
+#ifdef SLIPPEDGRID
+inline bool Position::is_slipped_grid() const {
+  return subvar == SLIPPEDGRID_VARIANT;
+}
+#endif
+
+#ifdef HORDE
+inline bool Position::is_horde() const {
+  return var == HORDE_VARIANT;
+}
+
+inline bool Position::is_horde_color(Color c) const {
+  return pieceCount[make_piece(c, KING)] == 0;
+}
+
+// Loss if horde is captured (Horde)
+inline bool Position::is_horde_loss() const {
+  return count<ALL_PIECES>(is_horde_color(WHITE) ? WHITE : BLACK) == 0;
+}
+#endif
+
+#ifdef ANTI
+inline bool Position::is_anti() const {
+  return var == ANTI_VARIANT;
+}
+
+inline bool Position::is_anti_loss() const {
+  return count<ALL_PIECES>(~sideToMove) == 0;
+}
+
+inline bool Position::is_anti_win() const {
+  return count<ALL_PIECES>(sideToMove) == 0;
+}
+#endif
+
+#if defined(ANTI) || defined(LOSERS)
+inline bool Position::can_capture() const {
+  Square ep = ep_square();
+  assert(ep == SQ_NONE
+         || (pawn_attacks_bb(~sideToMove, ep) & pieces(sideToMove, PAWN)));
+  if (ep != SQ_NONE)
+      return true;
+  Bitboard target = pieces(~sideToMove);
+  Bitboard b1 = pieces(sideToMove, PAWN), b2 = pieces(sideToMove) - b1;
+  if ((sideToMove == WHITE ? pawn_attacks_bb<WHITE>(b1) : pawn_attacks_bb<BLACK>(b1)) & target)
+      return true;
+  while (b2)
+  {
+      Square s = pop_lsb(b2);
+      if (attacks_bb(type_of(piece_on(s)), s, pieces()) & target)
+          return true;
+  }
+  return false;
+}
+#endif
+
+#ifdef LOSERS
+inline bool Position::is_losers() const {
+  return var == LOSERS_VARIANT;
+}
+
+inline bool Position::is_losers_loss() const {
+  return count<ALL_PIECES>(~sideToMove) == 1;
+}
+
+inline bool Position::is_losers_win() const {
+  return count<ALL_PIECES>(sideToMove) == 1;
+}
+
+// Position::can_capture_losers tests whether we have a legal capture
+// in a losers chess position.
+
+inline bool Position::can_capture_losers() const {
+
+  // A king may capture undefended pieces
+  Square ksq = square<KING>(sideToMove);
+  Bitboard attacks = attacks_bb<KING>(ksq) & pieces(~sideToMove);
+
+  // If not in check, unpinned non-king pieces and pawns may freely capture
+  if (!attacks && !checkers() && !st->blockersForKing[sideToMove] && ep_square() == SQ_NONE)
+      return can_capture();
+  while (attacks)
+      if (!(attackers_to(pop_lsb(attacks), pieces() ^ ksq) & pieces(~sideToMove)))
+          return true;
+
+  // Any non-king capture must capture the checking piece(s)
+  Bitboard target = checkers() ? checkers() : pieces(~sideToMove);
+  if (more_than_one(checkers()))
+      return false;
+
+  Square ep = ep_square();
+  assert(ep == SQ_NONE
+         || (pawn_attacks_bb(~sideToMove, ep) & pieces(sideToMove, PAWN)));
+  if (ep != SQ_NONE)
+  {
+      Bitboard b = pawn_attacks_bb(~sideToMove, ep) & pieces(sideToMove, PAWN);
+      while (b)
+      {
+          // Test en passant legality by simulating the move
+          Square from = pop_lsb(b);
+          Square capsq = ep - pawn_push(sideToMove);
+          Bitboard occupied = (pieces() ^ from ^ capsq) | ep;
+
+          assert(piece_on(capsq) == make_piece(~sideToMove, PAWN));
+          assert(piece_on(ep) == NO_PIECE);
+
+          if (   !(attacks_bb<  ROOK>(ksq, occupied) & pieces(~sideToMove, QUEEN, ROOK))
+              && !(attacks_bb<BISHOP>(ksq, occupied) & pieces(~sideToMove, QUEEN, BISHOP)))
+              return true;
+      }
+  }
+
+  // Loop over our pieces to find legal captures
+  Bitboard b = pieces(sideToMove) ^ ksq;
+  while (b)
+  {
+      Square s = pop_lsb(b);
+      PieceType pt = type_of(piece_on(s));
+      attacks = pt == PAWN ? pawn_attacks_bb(sideToMove, s) : attacks_bb(pt, s, pieces());
+
+      // A pinned piece may only capture along the pin
+      if (st->blockersForKing[sideToMove] & s)
+          attacks &= LineBB[s][ksq];
+      if (attacks & target)
+          return true;
+  }
+  return false;
+}
+#endif
+
+#ifdef GIVEAWAY
+inline bool Position::is_giveaway() const {
+  return subvar == GIVEAWAY_VARIANT;
+}
+#endif
+
+#ifdef SUICIDE
+inline bool Position::is_suicide() const {
+  return subvar == SUICIDE_VARIANT;
+}
+#endif
+
+#ifdef CRAZYHOUSE
+inline bool Position::is_house() const {
+  return var == CRAZYHOUSE_VARIANT;
+}
+
+template<PieceType Pt> inline int Position::count_in_hand(Color c) const {
+  return pieceCountInHand[c][Pt];
+}
+
+template<PieceType Pt> inline int Position::count_in_hand() const {
+  return count_in_hand<Pt>(WHITE) + count_in_hand<Pt>(BLACK);
+}
+
+inline void Position::add_to_hand(Color c, PieceType pt) {
+  pieceCountInHand[c][pt]++;
+  pieceCountInHand[c][ALL_PIECES]++;
+  psq += PSQT::psq[make_piece(c, pt)][SQ_NONE];
+}
+
+inline void Position::remove_from_hand(Color c, PieceType pt) {
+  pieceCountInHand[c][pt]--;
+  pieceCountInHand[c][ALL_PIECES]--;
+  psq -= PSQT::psq[make_piece(c, pt)][SQ_NONE];
+}
+
+inline bool Position::is_promoted(Square s) const {
+  return promotedPieces & s;
+}
+#endif
+
+#ifdef BUGHOUSE
+inline bool Position::is_bughouse() const {
+  return var == CRAZYHOUSE_VARIANT && subvar == BUGHOUSE_VARIANT;
+}
+#endif
+
+#ifdef LOOP
+inline bool Position::is_loop() const {
+  return var == CRAZYHOUSE_VARIANT && subvar == LOOP_VARIANT;
+}
+#endif
+
+#ifdef PLACEMENT
+inline bool Position::is_placement() const {
+  return var == CRAZYHOUSE_VARIANT && subvar == PLACEMENT_VARIANT;
+}
+#endif
+
+#ifdef KNIGHTRELAY
+inline bool Position::is_knight_relay() const {
+  return subvar == KNIGHTRELAY_VARIANT;
+}
+#endif
+
+#ifdef RELAY
+inline bool Position::is_relay() const {
+  return subvar == RELAY_VARIANT;
+}
+#endif
+
+#ifdef KOTH
+inline bool Position::is_koth() const {
+  return var == KOTH_VARIANT;
+}
+
+// Win if king is in the center (KOTH)
+inline bool Position::is_koth_win() const {
+  Square ksq = square<KING>(sideToMove);
+  return (rank_of(ksq) == RANK_4 || rank_of(ksq) == RANK_5) &&
+         (file_of(ksq) == FILE_D || file_of(ksq) == FILE_E);
+}
+
+// Loss if king is in the center (KOTH)
+inline bool Position::is_koth_loss() const {
+  Square ksq = square<KING>(~sideToMove);
+  return (rank_of(ksq) == RANK_4 || rank_of(ksq) == RANK_5) &&
+         (file_of(ksq) == FILE_D || file_of(ksq) == FILE_E);
+}
+#endif
+
+#ifdef RACE
+inline bool Position::is_race() const {
+  return var == RACE_VARIANT;
+}
+
+// Win if king is on the eighth rank (Racing Kings)
+inline bool Position::is_race_win() const {
+  return rank_of(square<KING>(sideToMove)) == RANK_8
+        && rank_of(square<KING>(~sideToMove)) < RANK_8;
+}
+
+// Draw if kings are on the eighth rank (Racing Kings)
+inline bool Position::is_race_draw() const {
+  return rank_of(square<KING>(sideToMove)) == RANK_8
+        && rank_of(square<KING>(~sideToMove)) == RANK_8;
+}
+
+// Loss if king is on the eighth rank (Racing Kings)
+inline bool Position::is_race_loss() const {
+  if (rank_of(square<KING>(~sideToMove)) != RANK_8)
+      return false;
+  if (rank_of(square<KING>(sideToMove)) < (sideToMove == WHITE ? RANK_8 : RANK_7))
+      return true;
+  // Check whether the black king can move to the eighth rank
+  Bitboard b = attacks_bb<KING>(square<KING>(sideToMove)) & rank_bb(RANK_8) & ~pieces(sideToMove);
+  while (b)
+      if (!(attackers_to(pop_lsb(b)) & pieces(~sideToMove)))
+          return false;
+  return true;
+}
+#endif
+
 inline bool Position::is_chess960() const {
   return chess960;
+}
+
+inline Variant Position::variant() const {
+  return var;
+}
+
+inline Variant Position::subvariant() const {
+  return subvar;
+}
+
+inline bool Position::is_variant_end() const {
+  switch (var)
+  {
+#ifdef ANTI
+  case ANTI_VARIANT:
+      return is_anti_win() || is_anti_loss();
+#endif
+#ifdef ATOMIC
+  case ATOMIC_VARIANT:
+      return is_atomic_win() || is_atomic_loss();
+#endif
+#ifdef EXTINCTION
+  case EXTINCTION_VARIANT:
+      return is_extinction_win() || is_extinction_loss();
+#endif
+#ifdef HORDE
+  case HORDE_VARIANT:
+      return is_horde_loss();
+#endif
+#ifdef KOTH
+  case KOTH_VARIANT:
+      return is_koth_win() || is_koth_loss();
+#endif
+#ifdef LOSERS
+  case LOSERS_VARIANT:
+      return is_losers_win() || is_losers_loss();
+#endif
+#ifdef RACE
+  case RACE_VARIANT:
+      return is_race_draw() || is_race_win() || is_race_loss();
+#endif
+#ifdef THREECHECK
+  case THREECHECK_VARIANT:
+      return is_three_check_win() || is_three_check_loss();
+#endif
+  default:
+      return false;
+  }
+}
+
+inline Value Position::variant_result(int ply, Value draw_value) const {
+  switch (var)
+  {
+#ifdef ANTI
+  case ANTI_VARIANT:
+      if (is_anti_win())
+          return mate_in(ply);
+      if (is_anti_loss())
+          return mated_in(ply);
+      break;
+#endif
+#ifdef ATOMIC
+  case ATOMIC_VARIANT:
+      if (is_atomic_win())
+          return mate_in(ply);
+      if (is_atomic_loss())
+          return mated_in(ply);
+      break;
+#endif
+#ifdef EXTINCTION
+  case EXTINCTION_VARIANT:
+      if (is_extinction_win())
+          return mate_in(ply);
+      if (is_extinction_loss())
+          return mated_in(ply);
+      break;
+#endif
+#ifdef HORDE
+  case HORDE_VARIANT:
+      if (is_horde_loss())
+          return mated_in(ply);
+      break;
+#endif
+#ifdef KOTH
+  case KOTH_VARIANT:
+      if (is_koth_win())
+          return mate_in(ply);
+      if (is_koth_loss())
+          return mated_in(ply);
+      break;
+#endif
+#ifdef LOSERS
+  case LOSERS_VARIANT:
+      if (is_losers_win())
+          return mate_in(ply);
+      if (is_losers_loss())
+          return mated_in(ply);
+      break;
+#endif
+#ifdef RACE
+  case RACE_VARIANT:
+      if (is_race_draw())
+          return draw_value;
+      if (is_race_win())
+          return mate_in(ply);
+      if (is_race_loss())
+          return mated_in(ply);
+      break;
+#endif
+#ifdef THREECHECK
+  case THREECHECK_VARIANT:
+      if (is_three_check_win())
+          return mate_in(ply);
+      if (is_three_check_loss())
+          return mated_in(ply);
+      break;
+#endif
+  default:;
+  }
+  // variant_result should not be called if is_variant_end is false.
+  assert(false);
+  return VALUE_ZERO;
+}
+
+inline Value Position::checkmate_value(int ply) const {
+  switch (subvar)
+  {
+#ifdef LOSERS
+  case LOSERS_VARIANT:
+      return mate_in(ply);
+#endif
+  default:;
+  }
+  return mated_in(ply);
+}
+
+inline Value Position::stalemate_value(int ply, Value drawValue) const {
+#ifdef ANTI
+  if (is_anti())
+  {
+#ifdef SUICIDE
+      if (is_suicide())
+      {
+          int balance = pieceCount[make_piece(sideToMove, ALL_PIECES)] - pieceCount[make_piece(~sideToMove, ALL_PIECES)];
+          if (balance > 0)
+              return mated_in(ply);
+          if (balance < 0)
+              return mate_in(ply);
+          return drawValue;
+      }
+#endif
+      return mate_in(ply);
+  }
+#endif
+#ifdef LOSERS
+  if (is_losers())
+      return mate_in(ply);
+#endif
+  return drawValue;
 }
 
 inline bool Position::capture(Move m) const {
@@ -439,6 +1215,21 @@ inline void Position::move_piece(Square from, Square to) {
   board[to] = pc;
   psq += PSQT::psq[pc][to] - PSQT::psq[pc][from];
 }
+
+#ifdef CRAZYHOUSE
+inline void Position::drop_piece(Piece pc, Square s) {
+  assert(pieceCountInHand[color_of(pc)][type_of(pc)]);
+  put_piece(pc, s);
+  remove_from_hand(color_of(pc), type_of(pc));
+}
+
+inline void Position::undrop_piece(Piece pc, Square s) {
+  remove_piece(s);
+  board[s] = NO_PIECE;
+  add_to_hand(color_of(pc), type_of(pc));
+  assert(pieceCountInHand[color_of(pc)][type_of(pc)]);
+}
+#endif
 
 inline void Position::do_move(Move m, StateInfo& newSt) {
   do_move(m, newSt, gives_check(m));

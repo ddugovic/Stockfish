@@ -64,6 +64,9 @@ constexpr Bitboard QueenSide   = FileABB | FileBBB | FileCBB | FileDBB;
 constexpr Bitboard CenterFiles = FileCBB | FileDBB | FileEBB | FileFBB;
 constexpr Bitboard KingSide    = FileEBB | FileFBB | FileGBB | FileHBB;
 constexpr Bitboard Center      = (FileDBB | FileEBB) & (Rank4BB | Rank5BB);
+#ifdef THREECHECK
+constexpr Bitboard WideCenter  = CenterFiles & (Rank4BB | Rank5BB);
+#endif
 
 constexpr Bitboard KingFlank[FILE_NB] = {
   QueenSide ^ FileDBB, QueenSide, QueenSide,
@@ -78,6 +81,9 @@ extern Bitboard BetweenBB[SQUARE_NB][SQUARE_NB];
 extern Bitboard LineBB[SQUARE_NB][SQUARE_NB];
 extern Bitboard PseudoAttacks[PIECE_TYPE_NB][SQUARE_NB];
 extern Bitboard PawnAttacks[COLOR_NB][SQUARE_NB];
+#ifdef GRID
+extern Bitboard GridBB[GRIDLAYOUT_NB][SQUARE_NB];
+#endif
 
 
 /// Magic holds all magic bitboards relevant data for a single square
@@ -117,8 +123,10 @@ inline Bitboard square_bb(Square s) {
 inline Bitboard  operator&( Bitboard  b, Square s) { return b &  square_bb(s); }
 inline Bitboard  operator|( Bitboard  b, Square s) { return b |  square_bb(s); }
 inline Bitboard  operator^( Bitboard  b, Square s) { return b ^  square_bb(s); }
+inline Bitboard  operator-( Bitboard  b, Square s) { return b & ~square_bb(s); }
 inline Bitboard& operator|=(Bitboard& b, Square s) { return b |= square_bb(s); }
 inline Bitboard& operator^=(Bitboard& b, Square s) { return b ^= square_bb(s); }
+inline Bitboard& operator-=(Bitboard& b, Square s) { return b &= ~square_bb(s); }
 
 inline Bitboard  operator&(Square s, Bitboard b) { return b & s; }
 inline Bitboard  operator|(Square s, Bitboard b) { return b | s; }
@@ -202,6 +210,12 @@ constexpr Bitboard adjacent_files_bb(Square s) {
   return shift<EAST>(file_bb(s)) | shift<WEST>(file_bb(s));
 }
 
+#ifdef ATOMIC
+inline Bitboard adjacent_squares_bb(Bitboard b) {
+  Bitboard b2 = shift<NORTH>(b) | shift<SOUTH>(b);
+  return b2 | shift<WEST>(b | b2) | shift<EAST>(b | b2);
+}
+#endif
 
 /// line_bb() returns a bitboard representing an entire line (from board edge
 /// to board edge) that intersects the two given squares. If the given squares
@@ -444,6 +458,11 @@ inline Square frontmost_sq(Color c, Bitboard b) {
   assert(b);
   return c == WHITE ? msb(b) : lsb(b);
 }
+#ifdef TWOKINGS
+inline Square backmost_sq(Color c, Bitboard b) {
+  return c == WHITE ? lsb(b) : msb(b);
+}
+#endif // #ifndef BITBOARD_H_INCLUDED
 
 } // namespace Stockfish
 
