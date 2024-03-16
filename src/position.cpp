@@ -1592,6 +1592,13 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
                   Color bc = color_of(bpc);
                   st->nonPawnMaterial[bc] -= PieceValue[CHESS_VARIANT][MG][type_of(bpc)];
 
+                  if (Eval::useNNUE)
+                    {
+                        dp.piece[dp.dirty_num] = bpc;
+                        dp.from[dp.dirty_num] = bsq;
+                        dp.to[dp.dirty_num] = SQ_NONE;
+                        dp.dirty_num++;
+                    }
                   // Update board and piece lists
                   remove_piece(bsq);
 
@@ -1607,6 +1614,7 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
                       k ^= Zobrist::castling[st->castlingRights];
                   }
               }
+
           }
       }
 #endif
@@ -1701,10 +1709,14 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
           dp.to[0] = to;
       }
 #endif
-
 #ifdef ATOMIC
       if (is_atomic() && captured) // Remove the blast piece(s)
       {
+              if (Eval::useNNUE)
+      {
+          dp.from[0] = SQ_NONE;
+          dp.to[0] = SQ_NONE;
+      }
           remove_piece(from);
           // Update material (hash key already updated)
           st->materialKey ^= Zobrist::psq[pc][pieceCount[pc]];
