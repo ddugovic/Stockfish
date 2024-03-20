@@ -874,7 +874,7 @@ bool Position::legal(Move m) const {
   Color us = sideToMove;
   Square from = from_sq(m);
   Square to = to_sq(m);
-
+  
   assert(color_of(moved_piece(m)) == us);
 #ifdef ANTI
   // If a player can capture, that player must capture
@@ -1255,10 +1255,15 @@ bool Position::pseudo_legal(const Move m) const {
               return true;
           if (capture(m))
           {
+
+              //Square capsq = type_of(m) == EN_PASSANT ? make_square(file_of(to), rank_of(from)) : to;
               // Capturing the opposing king or all checking pieces suffices.
               Bitboard blast = attacks_bb(KING, to, 0) & (pieces() ^ pieces(PAWN));
+              //Bitboard b = pieces() ^ ((blast | capsq) | from);
+
               if ((blast & square<KING>(~us)) || ~(checkers() & blast))
                   return true;
+                  
           }
       }
 #endif
@@ -1419,6 +1424,7 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
 
   assert(is_ok(m));
   assert(&newSt != st);
+
 #ifdef ANTI
   assert(!is_anti() || !givesCheck);
 #endif
@@ -1714,8 +1720,9 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
       {
               if (Eval::useNNUE)
       {
-          dp.from[0] = SQ_NONE;
+          dp.piece[0] = pc;
           dp.to[0] = SQ_NONE;
+          dp.from[0] = from;
       }
           remove_piece(from);
           // Update material (hash key already updated)
@@ -2254,7 +2261,7 @@ bool Position::see_ge(Move m, Bitboard& occupied, Value threshold) const {
       if (threshold > VALUE_ZERO)
           return false;
 
-      Bitboard occupied = pieces() ^ from;
+      occupied = pieces() ^ from;
       Bitboard attackers = attackers_to(to, occupied) & occupied & pieces(~stm) & ~pieces(KING);
 
       // Loop over attacking pieces
@@ -2282,7 +2289,7 @@ bool Position::see_ge(Move m, Bitboard& occupied, Value threshold) const {
   if (is_extinction() && ! more_than_one(pieces(color_of(piece_on(from)), type_of(piece_on(from)))))
   {
       // Toggles to square occupancy in case of stm != sideToMove
-      Bitboard occupied = pieces() ^ from ^ to;
+      occupied = pieces() ^ from ^ to;
       if (type_of(m) == EN_PASSANT)
           occupied ^= make_square(file_of(to), rank_of(from));
       if (attackers_to(to, occupied) & occupied & pieces(color_of(piece_on(from))))

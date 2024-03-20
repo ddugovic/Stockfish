@@ -20,6 +20,7 @@
 
 #include "movegen.h"
 #include "position.h"
+#include "uci.h"
 
 namespace Stockfish {
 
@@ -224,10 +225,29 @@ namespace {
 #ifdef ATOMIC
         if constexpr (V == ATOMIC_VARIANT)
         {
-            b1 &= (Type == CAPTURES || Type == NON_EVASIONS) ? target : ~adjacent_squares_bb(pos.pieces(Us, KING));
-            b2 &= (Type == CAPTURES || Type == NON_EVASIONS) ? target : ~adjacent_squares_bb(pos.pieces(Us, KING));
+            //b1 &= (Type == CAPTURES || Type == NON_EVASIONS) ? target : ~adjacent_squares_bb(pos.pieces(Us, KING));
+            //b2 &= (Type == CAPTURES || Type == NON_EVASIONS) ? target : ~adjacent_squares_bb(pos.pieces(Us, KING));
+            if (Type == EVASIONS) {
+                b1 = shift<UpRight>(pawnsOn7) & ~adjacent_squares_bb(pos.pieces(Us, KING)) & target & pos.pieces(Them);
+                b2 = shift<UpLeft >(pawnsOn7) & ~adjacent_squares_bb(pos.pieces(Us, KING)) & target & pos.pieces(Them);
+         }
+            else if (Type == CAPTURES) {
+                b1 = shift<UpRight>(pawnsOn7) & target;
+                b2 = shift<UpLeft >(pawnsOn7) & target;
+            }
+            else if (Type == NON_EVASIONS) {
+                b1 = shift<UpRight>(pawnsOn7) & target & pos.pieces(Them);
+                b2 = shift<UpLeft >(pawnsOn7) & target & pos.pieces(Them);
+            }
         }
 #endif
+
+#ifdef ATOMIC
+            // Promotes only if promotion wins or explodes checkers
+            if (V == ATOMIC_VARIANT && pos.checkers())
+                b3 = shift<Up     >(pawnsOn7) & emptySquares & target;
+#endif
+
 #ifdef ANTI
         if constexpr (V == ANTI_VARIANT)
             b3 &= target;
@@ -257,10 +277,22 @@ namespace {
 #ifdef ATOMIC
         if constexpr (V == ATOMIC_VARIANT)
         {
-            b1 &= (Type == CAPTURES || Type == NON_EVASIONS) ? target : ~adjacent_squares_bb(pos.pieces(Us, KING));
-            b2 &= (Type == CAPTURES || Type == NON_EVASIONS) ? target : ~adjacent_squares_bb(pos.pieces(Us, KING));
+            //b1 &= (Type == CAPTURES || Type == NON_EVASIONS) ? target : ~adjacent_squares_bb(pos.pieces(Us, KING));
+            //b2 &= (Type == CAPTURES || Type == NON_EVASIONS) ? target : ~adjacent_squares_bb(pos.pieces(Us, KING));
+            if (Type == EVASIONS) {
+                b1 = shift<UpRight>(pawnsNotOn7) & ~adjacent_squares_bb(pos.pieces(Us, KING)) & target & pos.pieces(Them);
+                b2 = shift<UpLeft >(pawnsNotOn7) & ~adjacent_squares_bb(pos.pieces(Us, KING)) & target & pos.pieces(Them);
+         }
+            else if (Type == CAPTURES) {
+                b1 = shift<UpRight>(pawnsNotOn7) & target;
+                b2 = shift<UpLeft >(pawnsNotOn7) & target;
+            }
+            else if (Type == NON_EVASIONS) {
+                b1 = shift<UpRight>(pawnsNotOn7) & target & pos.pieces(Them);
+                b2 = shift<UpLeft >(pawnsNotOn7) & target & pos.pieces(Them);
+            }
         }
-#endif
+#endif 
 
         while (b1)
         {
